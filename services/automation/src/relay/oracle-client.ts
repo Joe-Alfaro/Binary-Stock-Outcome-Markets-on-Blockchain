@@ -4,6 +4,7 @@ import type { Idl } from '@anchor-lang/core'
 import { PublicKey, Transaction } from '@solana/web3.js'
 import type { Connection, Keypair } from '@solana/web3.js'
 import type { NormalizedPrice } from '@meridian/price-providers'
+import { oracleIdlPath } from '../chain/anchor.js'
 import type { CloseRequest, OracleClient } from './types.js'
 
 /** Sub-second finality: `confirmed` is enough for every relay write (R55). */
@@ -15,8 +16,8 @@ const TICKER_BYTES = 8
 
 const encoder = new TextEncoder()
 
-/** The IDL `anchor build` writes, read at runtime so the worker needn't compile against `target/`. */
-export function loadOracleIdl(path = 'target/idl/meridian_oracle.json'): Idl {
+/** The `meridian_oracle` IDL, read at runtime so the worker needn't compile against `target/`. */
+export function loadOracleIdl(path = oracleIdlPath()): Idl {
   return JSON.parse(readFileSync(path, 'utf8')) as Idl
 }
 

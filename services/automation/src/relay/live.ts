@@ -23,7 +23,7 @@ export interface LiveContext extends Pick<RelayPublisherOptions, 'oracle' | 'tic
 
 export interface LiveRelay {
   publishLatest(): Promise<LiveOutcome>
-  runLive(untilTs: number): Promise<void>
+  runLive(untilTs: number, signal?: AbortSignal): Promise<void>
 }
 
 export function createLiveRelay(context: LiveContext): LiveRelay {
@@ -60,9 +60,9 @@ export function createLiveRelay(context: LiveContext): LiveRelay {
     }
   }
 
-  async function runLive(untilTs: number): Promise<void> {
+  async function runLive(untilTs: number, signal?: AbortSignal): Promise<void> {
     let failures = 0
-    while (clock.now() < untilTs) {
+    while (!signal?.aborted && clock.now() < untilTs) {
       const tickStart = clock.now()
       const outcome = await publishLatest()
       failures = outcome.status === 'error' ? failures + 1 : 0

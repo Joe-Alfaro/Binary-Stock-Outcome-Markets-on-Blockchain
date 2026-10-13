@@ -14,9 +14,20 @@ import {
   oracleIdlPath,
   type ChainClient,
 } from './chain/index.js'
+import { loadConfig } from './config.js'
 import type { HealthState } from './health.js'
-import { runSettlementJob, systemClock, type Clock, type JobLogger } from './jobs/index.js'
+import { runInvariantAudits } from './invariants.js'
+import { TICKERS, runSettlementJob, systemClock, type Clock, type JobLogger } from './jobs/index.js'
 import { runMorningScheduler } from './jobs/scheduler.js'
+import { createRelayPublisher } from './relay/index.js'
+import { createAnchorOracleClient, loadOracleIdl } from './relay/oracle-client.js'
+import {
+  relayClock,
+  runCloseLoop,
+  runLiveLoop,
+  skippingUnknownTickers,
+  withPublishHealth,
+} from './relay/run.js'
 
 const { utils } = anchor
 
@@ -134,14 +145,30 @@ export interface WorkerDeps {
 }
 
 export interface Worker {
-  /** Resolves once both jobs have stopped. */
+  /** Resolves once every job and the relay have stopped. */
   done: Promise<void>
   stop(): void
 }
 
+/** The slot-1 relay signer from RELAY_SIGNER_1_KEYPAIR, in any form `parseKeypair` reads. */
+function relaySigner(env: NodeJS.ProcessEnv): Keypair {
+  const value = env.RELAY_SIGNER_1_KEYPAIR?.trim()
+  if (!value) throw new Error('RELAY_SIGNER_1_KEYPAIR is not set')
+  try {
+    return parseKeypair(value)
+  } catch (error) {
+    // Never echo the value: it may be a secret key.
+    throw new Error(
+      'RELAY_SIGNER_1_KEYPAIR is not a keypair (file path, 64-byte JSON array or base58 secret key)',
+      { cause: error },
+    )
+  }
+}
+
 /**
- * Starts the morning job scheduler and the settlement loop against the cluster in `env`, signed
- * by the automation authority.
+ * Starts the morning job scheduler, the settlement loop, the slot-1 relay (close records after
+ * `close_ts` and live prices) and the invariant audit against the cluster in `env`. The jobs sign
+ * with the automation authority and the relay with its own signer.
  */
 export function startWorker(
   health: HealthState,
@@ -149,27 +176,53 @@ export function startWorker(
   deps: WorkerDeps = {},
 ): Worker {
   const settings = loadChainSettings(env)
+  const signer = relaySigner(env)
   const idl: Idl = loadMeridianIdl(settings.idlPath)
+  const oracleIdl = loadOracleIdl(oracleIdlPath(settings.idlPath))
+  const oracleProgramId = settings.oracleProgramId
+    ? new PublicKey(settings.oracleProgramId)
+    : loadOracleProgramId(oracleIdlPath(settings.idlPath))
+  const connection = new Connection(settings.rpcUrl, 'confirmed')
   const chain = createAnchorChainClient({
-    connection: new Connection(settings.rpcUrl, 'confirmed'),
+    connection,
     authority: parseKeypair(settings.automationKeypair),
     idl: settings.programId ? { ...idl, address: settings.programId } : idl,
-    oracleProgramId: settings.oracleProgramId
-      ? new PublicKey(settings.oracleProgramId)
-      : loadOracleProgramId(oracleIdlPath(settings.idlPath)),
+    oracleProgramId,
   })
   const clock = deps.clock ?? systemClock
-  const log = createJobLogger(deps.log ?? console.log, clock)
+  const write = deps.log ?? console.log
+  const log = createJobLogger(write, clock)
   const alerter = createAlerter({ sinks: deps.alertSinks ?? sinksFromEnv(env) })
   const controller = new AbortController()
+  const { signal } = controller
   const shared = { chain: withScanHealth(chain, health, clock), alerter, clock, log }
+  const source = createRelaySource(env, 1, { now: () => Math.floor(clock.now() / 1000) })
+  const oracle = createAnchorOracleClient({
+    connection,
+    signer,
+    idl: { ...oracleIdl, address: oracleProgramId.toBase58() },
+  })
+  const publisher = createRelayPublisher({
+    oracle: withPublishHealth(oracle, () => health.recordRelayPublish(new Date(clock.now()))),
+    source,
+    live: skippingUnknownTickers(source, (ticker, error) =>
+      log.info('relay source has no live price; skipping ticker', {
+        ticker,
+        source: source.name,
+        error: error.message,
+      }),
+    ),
+    tickers: TICKERS,
+    clock: relayClock(clock, signal),
+    log: write,
+    demo: loadConfig(env).demoMode,
+  })
   const done = Promise.all([
-    runMorningScheduler({
-      ...shared,
-      provider: createRelaySource(env, 1),
-      signal: controller.signal,
-    }),
-    runSettlementJob({ ...shared, signal: controller.signal }),
+    runMorningScheduler({ ...shared, provider: source, signal }),
+    runSettlementJob({ ...shared, signal }),
+    runCloseLoop({ ...shared, publisher, signal }),
+    runLiveLoop({ publisher, signal }),
+    runInvariantAudits({ chain, alerter, log, clock, signal }),
   ]).then(() => undefined)
   return { done, stop: () => controller.abort() }
 }

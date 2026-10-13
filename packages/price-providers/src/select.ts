@@ -4,7 +4,10 @@ import type { LivePriceProvider, PriceProvider } from './types.js'
 import { createYahooSource } from './yahoo.js'
 import type { YahooSourceOptions } from './yahoo.js'
 
-/** Builds the relay source named by `RELAY_<slot>_SOURCE`, defaulting to yahoo when unset. */
+/**
+ * Builds the relay source named by `RELAY_<slot>_SOURCE`, defaulting to yahoo when unset. The
+ * mock source also takes `yahooOptions.now`, so both stamp live prices from the same clock.
+ */
 export function createRelaySource(
   env: Record<string, string | undefined>,
   slot: 1 | 2 = 1,
@@ -15,6 +18,6 @@ export function createRelaySource(
   if (!isRelaySourceName(name)) {
     throw new Error(`${variable}=${name} is not one of ${RELAY_SOURCE_NAMES.join(', ')}`)
   }
-  if (name === 'mock') return createMockSource()
+  if (name === 'mock') return createMockSource(yahooOptions.now ? { now: yahooOptions.now } : {})
   return createYahooSource(yahooOptions)
 }

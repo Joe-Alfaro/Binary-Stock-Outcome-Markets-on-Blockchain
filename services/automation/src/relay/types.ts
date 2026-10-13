@@ -100,6 +100,9 @@ export interface RelayPublisher {
   runCloses(tradingDay: string, closeTs: number, deadlineTs: number): Promise<CloseOutcome[]>
   /** One live-price tick: publishes every ticker's latest price if the regular session is open. */
   publishLatest(): Promise<LiveOutcome>
-  /** Runs live-price ticks until `untilTs`, at least every 60 s in regular hours. */
-  runLive(untilTs: number): Promise<void>
+  /**
+   * Runs live-price ticks until `untilTs` or until `signal` aborts, at least every 60 s in regular
+   * hours. Stopping by `signal` needs a clock whose `sleep` returns on that abort.
+   */
+  runLive(untilTs: number, signal?: AbortSignal): Promise<void>
 }

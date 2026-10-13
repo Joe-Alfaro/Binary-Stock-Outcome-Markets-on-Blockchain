@@ -117,6 +117,8 @@ the script checks that before it sends anything.
 **Hosting.** The web app and the worker are meant to run as two Railway services, configured in
 `app/railway.json` and `services/automation/railway.json` with build and start commands and health
 checks (`/` and `/healthz`). Both services have been built and started locally to check the config.
+Railway builds from a clean checkout without `target/`, so the worker ships both program IDLs in
+`services/automation/idl/`; run `make ship-idls` after changing a program's interface.
 The first live Railway deploy waits for the user's confirmation, so there is no public URL yet.
 
 ## Lifecycle demo
@@ -310,7 +312,9 @@ calendar, alert sinks, morning and settlement jobs, the relay publisher, the ops
 web app (Landing, Markets, Trade, Portfolio and History pages, Phantom and Solflare wallets, live
 book and prices), and demo mode (an admin toggle that lets markets use custom times; otherwise the
 program enforces the regular schedule). The web app trades and redeems through the SDK builders.
-The worker runs the morning job scheduler and the settlement loop against the chain. Lifecycle
+The worker runs the morning job scheduler, the settlement loop, the slot-1 relay (close records
+once a market's `close_ts` passes, and latest prices every 30 s in the session) and a per-minute
+collateral and supply audit that alerts `invariant_failure`. Lifecycle
 integration tests on a local validator cover create, mint, the four trade paths, the relay close,
 settlement, the admin fallback, redeem and both jobs against the real chain client. Close out orders and
 redeem is one transaction unless the wallet has more resting orders than fit in one; then the
@@ -318,8 +322,6 @@ wallet approves each transaction in order.
 
 Not finished yet:
 
-- The worker's entry point doesn't yet start the relay publisher and price endpoint. The publisher
-  is tested on its own.
 - The admin CLI (config updates, propose and finalize admin price, pause) and the rent measurement
   script.
 - On-chain Pyth and Chainlink adapters (see [Price oracle](#price-oracle)).
