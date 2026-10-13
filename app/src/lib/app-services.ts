@@ -1,6 +1,8 @@
 import {
   buildBuyNoTransaction,
   buildBuyYesTransaction,
+  buildCloseOutAndRedeem,
+  buildRedeem,
   buildSellNoTransaction,
   buildSellYesTransaction,
 } from '@meridian/sdk'
@@ -21,12 +23,14 @@ export interface AppServices extends Services {
   wallet: AdapterWalletPort
 }
 
-/** The SDK trade-path builders. The SDK has no redeem builders yet, so redeem stays unavailable. */
+/** The SDK trade-path and redeem builders. */
 export const sdkTradeBuilders: TradeBuilders = {
   buildBuyYesTransaction,
   buildSellYesTransaction,
   buildBuyNoTransaction,
   buildSellNoTransaction,
+  buildRedeem,
+  buildCloseOutAndRedeem,
 }
 
 let instance: AppServices | null = null

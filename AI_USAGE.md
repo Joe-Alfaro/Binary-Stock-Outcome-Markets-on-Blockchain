@@ -13,6 +13,18 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   bootstrap's `DEMO_MODE` handling and the chain client call.
 - **Human review:** pending MR review.
 
+## 2026-10-12 — SDK redeem and close-out builders (`feat/redeem-builder`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote red `node:test` tests for `buildRedeem` and
+  `buildCloseOutAndRedeem` and LiteSVM tests showing a Yes-only wallet can redeem when the same
+  transaction creates its No account. The implementation worker wrote both builders (greedy
+  in-order packing when close-out doesn't fit one transaction), moved the shared instruction
+  helpers into one module, and wired the builders into the web app: the chain client reads the
+  outcome, seat and resting orders, and the Portfolio signs and confirms each close-out
+  transaction in order. It didn't change the tests.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — README and doc checks (`feat/docs`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the checks, another wrote the docs.

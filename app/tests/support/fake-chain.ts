@@ -30,6 +30,8 @@ export class FakeChain implements ChainClient {
   failBookSubscriptions = false
   /** Rejects the next `sendAndConfirm` with this error. */
   sendError: unknown = null
+  /** How many transactions close-out builds: more than one when the orders don't fit one. */
+  closeOutTransactions = 1
 
   readonly calls = {
     getBook: [] as string[],
@@ -102,9 +104,11 @@ export class FakeChain implements ChainClient {
     return { raw: { kind: 'redeem', request } }
   }
 
-  async buildCloseOutAndRedeem(request: MarketOwner): Promise<UnsignedTx> {
+  async buildCloseOutAndRedeem(request: MarketOwner): Promise<UnsignedTx[]> {
     this.calls.buildCloseOutAndRedeem.push(request)
-    return { raw: { kind: 'close-out-and-redeem', request } }
+    return Array.from({ length: this.closeOutTransactions }, (_, part) => ({
+      raw: { kind: 'close-out-and-redeem', request, part },
+    }))
   }
 
   async sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation> {

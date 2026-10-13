@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import type { LatestPrice, Ticker } from './chain'
+import type { LatestPrice, Ticker, UnsignedTx } from './chain'
 import { toChainError, tradeErrorMessage } from './chain'
 import { useServices } from './services'
 
@@ -97,20 +97,28 @@ export type TxState =
 
 /**
  * Builds, signs once and confirms one transaction at `confirmed` (R54, R55). The wallet prompt is
- * the only signature; failures become the plain-language messages from `tradeErrorMessage`.
+ * the only signature; failures become the plain-language messages from `tradeErrorMessage`. When
+ * `build` returns several transactions (a split close-out), each is signed and confirmed in order,
+ * and the first failure stops the rest.
  */
 export function useTransaction() {
   const { chain, wallet } = useServices()
   const [tx, setTx] = useState<TxState>({ phase: 'idle' })
 
   const run = useCallback(
-    async (label: string, build: () => ReturnType<typeof chain.buildTrade>) => {
+    async (label: string, build: () => Promise<UnsignedTx | UnsignedTx[]>) => {
       setTx({ phase: 'signing', label })
       try {
-        const unsigned = await build()
-        const signed = await wallet.signTransaction(unsigned)
-        setTx({ phase: 'confirming', label })
-        const { signature } = await chain.sendAndConfirm(signed, 'confirmed')
+        const built = await build()
+        const all = Array.isArray(built) ? built : [built]
+        let signature = ''
+        for (const [i, unsigned] of all.entries()) {
+          const step = all.length > 1 ? `${label} (${i + 1} of ${all.length})` : label
+          setTx({ phase: 'signing', label: step })
+          const signed = await wallet.signTransaction(unsigned)
+          setTx({ phase: 'confirming', label: step })
+          signature = (await chain.sendAndConfirm(signed, 'confirmed')).signature
+        }
         setTx({ phase: 'confirmed', label, signature })
         return true
       } catch (error) {

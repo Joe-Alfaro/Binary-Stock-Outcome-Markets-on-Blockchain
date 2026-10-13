@@ -2,9 +2,15 @@ import type { Holdings, ProgramEvent, YesBook } from '@meridian/sdk'
 import { assertNotMainnet } from '@meridian/sdk'
 import type { AccountInfo, GetProgramAccountsFilter } from '@solana/web3.js'
 import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js'
-import type { MarketAccounts, RedeemContext, TradeBuilders, TradeContext } from './builders'
+import type {
+  CloseOutContext,
+  MarketAccounts,
+  RestingOrder,
+  TradeBuilders,
+  TradeContext,
+} from './builders'
 import { ChainError, toChainError } from './errors'
-import type { MarketAccount, OrderBookAccount } from './layout'
+import type { MarketAccount, OrderBookAccount, RestingOrder as BookOrder } from './layout'
 import {
   bytesToBase64,
   base58ToBytes,
@@ -319,13 +325,23 @@ class SolanaChainClient implements ChainClient {
     const ownAsks = book.asks.filter((o) => o.seat === seatIndex)
     const ownBids = book.bids.filter((o) => o.seat === seatIndex)
     const lockedYes = BigInt(ownAsks.reduce((sum, o) => sum + o.qty, 0)) * BigInt(UNIT)
+    const resting =
+      (side: RestingOrder['side']) =>
+      (o: BookOrder): RestingOrder => ({
+        orderId: o.orderId,
+        side,
+        priceCents: o.priceCents,
+        qty: o.qty,
+      })
     return {
       market,
       book,
       walletYes,
       walletNo,
       bookYes: (seat?.freeYes ?? 0n) + lockedYes,
-      restingOrderIds: seatIndex < 0 ? [] : [...ownBids, ...ownAsks].map((o) => o.orderId),
+      seat: seat ? { freeYesBaseUnits: seat.freeYes, freeUsdcBaseUnits: seat.freeUsdc } : null,
+      restingOrders:
+        seatIndex < 0 ? [] : [...ownBids.map(resting('Bid')), ...ownAsks.map(resting('Ask'))],
     }
   }
 
@@ -456,9 +472,9 @@ class SolanaChainClient implements ChainClient {
     return this.wrap(tx, latest.lastValidBlockHeight)
   }
 
-  private async redeemContext(
+  private async closeOutContext(
     request: MarketOwner,
-  ): Promise<{ ctx: RedeemContext; height: number }> {
+  ): Promise<{ ctx: CloseOutContext; height: number }> {
     const owner = new PublicKey(request.owner)
     const marketAddress = new PublicKey(request.market)
     const [b, latest] = await Promise.all([this.balances(owner, marketAddress), this.blockhash()])
@@ -466,9 +482,11 @@ class SolanaChainClient implements ChainClient {
       ctx: {
         owner,
         market: await this.marketAccounts(marketAddress, b.market, b.book),
-        yesBaseUnits: b.walletYes + b.bookYes,
-        noBaseUnits: b.walletNo,
-        restingOrderIds: b.restingOrderIds,
+        outcome: b.market.settled ? b.market.outcome : null,
+        walletYesBaseUnits: b.walletYes,
+        walletNoBaseUnits: b.walletNo,
+        restingOrders: b.restingOrders,
+        seat: b.seat,
         recentBlockhash: latest.blockhash,
       },
       height: latest.lastValidBlockHeight,
@@ -476,19 +494,19 @@ class SolanaChainClient implements ChainClient {
   }
 
   async buildRedeem(request: MarketOwner): Promise<UnsignedTx> {
-    const build = this.builders().buildRedeemTransaction
+    const build = this.builders().buildRedeem
     if (!build) throw new ChainError('Unknown', 'Redeem is not available in this build yet.')
-    const { ctx, height } = await this.redeemContext(request)
+    const { ctx, height } = await this.closeOutContext(request)
     return this.wrap(build(ctx), height)
   }
 
-  async buildCloseOutAndRedeem(request: MarketOwner): Promise<UnsignedTx> {
-    const build = this.builders().buildCloseOutAndRedeemTransaction
+  async buildCloseOutAndRedeem(request: MarketOwner): Promise<UnsignedTx[]> {
+    const build = this.builders().buildCloseOutAndRedeem
     if (!build) {
       throw new ChainError('Unknown', 'Close out and redeem is not available in this build yet.')
     }
-    const { ctx, height } = await this.redeemContext(request)
-    return this.wrap(build(ctx), height)
+    const { ctx, height } = await this.closeOutContext(request)
+    return build(ctx).transactions.map((tx) => this.wrap(tx, height))
   }
 
   async sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation> {
