@@ -1,0 +1,358 @@
+{
+  "description": "Closing-price rule cases. Update times are offsets in seconds from closeTs; settleOffset is when the settle transaction lands. Unset update fields take these defaults: ticker, expo, conf 0, session Regular, officialClose false. Strikes use the default expo.",
+  "defaults": {
+    "ticker": "AAPL",
+    "closeTs": 1793390400,
+    "settleOffset": 30,
+    "maxStalenessSecs": 300,
+    "maxConfBps": 50,
+    "expo": -2
+  },
+  "cases": [
+    {
+      "name": "shape 1: official close at, above and below the strike",
+      "requirements": ["R1", "R33"],
+      "updates": [{ "offset": 0, "price": 23000, "officialClose": true }],
+      "expect": {
+        "shape": "OfficialClose",
+        "settlePrice": 23000,
+        "strikes": [
+          { "strike": 23000, "outcome": "Yes" },
+          { "strike": 22000, "outcome": "Yes" },
+          { "strike": 24000, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "shape 1 wins over intraday updates passed alongside it",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -30, "price": 22990 },
+        { "offset": 0, "price": 22000 },
+        { "offset": 30, "price": 23100 },
+        { "offset": 2, "price": 23050, "officialClose": true }
+      ],
+      "expect": {
+        "shape": "OfficialClose",
+        "settlePrice": 23050,
+        "strikes": [
+          { "strike": 23050, "outcome": "Yes" },
+          { "strike": 23051, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "shape 2: exact timestamp at, above and below the strike",
+      "requirements": ["R1", "R33"],
+      "updates": [{ "offset": 0, "price": 23000 }],
+      "expect": {
+        "shape": "ExactTimestamp",
+        "settlePrice": 23000,
+        "strikes": [
+          { "strike": 23000, "outcome": "Yes" },
+          { "strike": 22999, "outcome": "Yes" },
+          { "strike": 23001, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "shape 2 wins over an interpolation pair",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -60, "price": 22000 },
+        { "offset": 0, "price": 23000 },
+        { "offset": 60, "price": 24000 }
+      ],
+      "expect": {
+        "shape": "ExactTimestamp",
+        "settlePrice": 23000,
+        "strikes": [
+          { "strike": 23000, "outcome": "Yes" },
+          { "strike": 23001, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "shape 3: interpolation at, above and below the strike",
+      "requirements": ["R1", "R33"],
+      "updates": [
+        { "offset": -30, "price": 22990 },
+        { "offset": 30, "price": 23010 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "settlePrice": 23000,
+        "strikes": [
+          { "strike": 23000, "outcome": "Yes" },
+          { "strike": 22990, "outcome": "Yes" },
+          { "strike": 23010, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "shape 3: a fractional value just below the strike loses, even though it rounds up to it",
+      "requirements": ["R1", "R33"],
+      "updates": [
+        { "offset": -100, "price": 22999 },
+        { "offset": 200, "price": 23001 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "strikes": [
+          { "strike": 23000, "outcome": "No" },
+          { "strike": 22999, "outcome": "Yes" }
+        ]
+      }
+    },
+    {
+      "name": "shape 3: a falling price interpolates exactly",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -200, "price": 23010 },
+        { "offset": 100, "price": 22980 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "settlePrice": 22990,
+        "strikes": [
+          { "strike": 22990, "outcome": "Yes" },
+          { "strike": 22989, "outcome": "Yes" },
+          { "strike": 22991, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "shape 3 uses the nearest update on each side of close",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": 250, "price": 25000 },
+        { "offset": -10, "price": 22990 },
+        { "offset": -250, "price": 20000 },
+        { "offset": 10, "price": 23010 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "settlePrice": 23000,
+        "strikes": [
+          { "strike": 23000, "outcome": "Yes" },
+          { "strike": 23001, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "boundary: t1 = close - 300 is accepted",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -300, "price": 22900 },
+        { "offset": 100, "price": 23300 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "settlePrice": 23200,
+        "strikes": [
+          { "strike": 23200, "outcome": "Yes" },
+          { "strike": 23201, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "boundary: t1 = close - 301 is rejected",
+      "requirements": ["R33", "R34"],
+      "updates": [
+        { "offset": -301, "price": 22900 },
+        { "offset": 100, "price": 23300 }
+      ],
+      "expect": { "error": "Stale" }
+    },
+    {
+      "name": "boundary: t2 = close + 300 is accepted",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -100, "price": 23000 },
+        { "offset": 300, "price": 23400 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "settlePrice": 23100,
+        "strikes": [
+          { "strike": 23100, "outcome": "Yes" },
+          { "strike": 23101, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "boundary: t2 = close + 301 is rejected",
+      "requirements": ["R33", "R34"],
+      "updates": [
+        { "offset": -100, "price": 23000 },
+        { "offset": 301, "price": 23400 }
+      ],
+      "expect": { "error": "Stale" }
+    },
+    {
+      "name": "an after-hours update after close is rejected",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -30, "price": 22990 },
+        { "offset": 30, "price": 23010, "session": "OutsideRegular" }
+      ],
+      "expect": { "error": "OutsideRegularSession" }
+    },
+    {
+      "name": "an outside-session update stamped at close is rejected",
+      "requirements": ["R33"],
+      "updates": [{ "offset": 0, "price": 23000, "session": "OutsideRegular" }],
+      "expect": { "error": "OutsideRegularSession" }
+    },
+    {
+      "name": "an update for another ticker is rejected",
+      "requirements": ["R33"],
+      "updates": [{ "offset": 0, "price": 23000, "ticker": "MSFT" }],
+      "expect": { "error": "WrongTicker" }
+    },
+    {
+      "name": "an interpolation pair with one update for another ticker is rejected",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -30, "price": 22990 },
+        { "offset": 30, "price": 23010, "ticker": "AAPLX" }
+      ],
+      "expect": { "error": "WrongTicker" }
+    },
+    {
+      "name": "a zero price is rejected",
+      "requirements": ["R33"],
+      "updates": [{ "offset": 0, "price": 0 }],
+      "expect": { "error": "NonPositivePrice" }
+    },
+    {
+      "name": "a negative price is rejected",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -30, "price": -5 },
+        { "offset": 30, "price": 23010 }
+      ],
+      "expect": { "error": "NonPositivePrice" }
+    },
+    {
+      "name": "confidence exactly at max_conf_bps is accepted",
+      "requirements": ["R34"],
+      "updates": [{ "offset": 0, "price": 23000, "conf": 115 }],
+      "expect": {
+        "shape": "ExactTimestamp",
+        "settlePrice": 23000,
+        "strikes": [{ "strike": 23000, "outcome": "Yes" }]
+      }
+    },
+    {
+      "name": "a wide confidence band is rejected",
+      "requirements": ["R34"],
+      "updates": [{ "offset": 0, "price": 23000, "conf": 116 }],
+      "expect": { "error": "ConfidenceTooWide" }
+    },
+    {
+      "name": "max_conf_bps is configurable",
+      "requirements": ["R34"],
+      "maxConfBps": 10,
+      "updates": [{ "offset": 0, "price": 23000, "conf": 50 }],
+      "expect": { "error": "ConfidenceTooWide" }
+    },
+    {
+      "name": "a 3:59:30 price is accepted when the settle transaction lands at 4:12",
+      "requirements": ["R34"],
+      "settleOffset": 720,
+      "updates": [
+        { "offset": -30, "price": 23000 },
+        { "offset": 30, "price": 23020 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "settlePrice": 23010,
+        "strikes": [
+          { "strike": 23010, "outcome": "Yes" },
+          { "strike": 23011, "outcome": "No" }
+        ]
+      }
+    },
+    {
+      "name": "a 3:50 price is rejected as stale",
+      "requirements": ["R34"],
+      "settleOffset": 720,
+      "updates": [
+        { "offset": -600, "price": 23000 },
+        { "offset": 30, "price": 23020 }
+      ],
+      "expect": { "error": "Stale" }
+    },
+    {
+      "name": "a lone 4:01 price is rejected",
+      "requirements": ["R34"],
+      "settleOffset": 720,
+      "updates": [{ "offset": 60, "price": 23000 }],
+      "expect": { "error": "NoValidShape" }
+    },
+    {
+      "name": "a lone 3:59:30 price is rejected",
+      "requirements": ["R33"],
+      "updates": [{ "offset": -30, "price": 23000 }],
+      "expect": { "error": "NoValidShape" }
+    },
+    {
+      "name": "no updates is rejected",
+      "requirements": ["R33"],
+      "updates": [],
+      "expect": { "error": "NoValidShape" }
+    },
+    {
+      "name": "max_staleness_secs is configurable: 200 s before close is stale at 120",
+      "requirements": ["R34"],
+      "maxStalenessSecs": 120,
+      "updates": [
+        { "offset": -200, "price": 23000 },
+        { "offset": 30, "price": 23020 }
+      ],
+      "expect": { "error": "Stale" }
+    },
+    {
+      "name": "max_staleness_secs is configurable: 120 s on each side is accepted at 120",
+      "requirements": ["R34"],
+      "maxStalenessSecs": 120,
+      "updates": [
+        { "offset": -120, "price": 23000 },
+        { "offset": 120, "price": 23020 }
+      ],
+      "expect": {
+        "shape": "Interpolated",
+        "settlePrice": 23010,
+        "strikes": [{ "strike": 23010, "outcome": "Yes" }]
+      }
+    },
+    {
+      "name": "early close: staleness is measured from the 1:00 PM close_ts",
+      "requirements": ["R34"],
+      "closeTs": 1795802400,
+      "updates": [{ "offset": 0, "price": 23000 }],
+      "expect": {
+        "shape": "ExactTimestamp",
+        "settlePrice": 23000,
+        "strikes": [{ "strike": 23000, "outcome": "Yes" }]
+      }
+    },
+    {
+      "name": "early close: a 4:00 PM price is stale on a 1:00 PM close",
+      "requirements": ["R34"],
+      "closeTs": 1795802400,
+      "updates": [{ "offset": 10800, "price": 23000 }],
+      "expect": { "error": "Stale" }
+    },
+    {
+      "name": "updates with different exponents are rejected",
+      "requirements": ["R33"],
+      "updates": [
+        { "offset": -30, "price": 22990 },
+        { "offset": 30, "price": 2301000, "expo": -4 }
+      ],
+      "expect": { "error": "ExpoMismatch" }
+    }
+  ]
+}
