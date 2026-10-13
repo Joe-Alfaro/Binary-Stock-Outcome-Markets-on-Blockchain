@@ -5,7 +5,7 @@ import { tradingDayTimes } from '../calendar/index.js'
 import { FakeChainClient } from '../chain/fake.js'
 import { FakeClock } from './fake-clock.js'
 import { runMorningScheduler } from './scheduler.js'
-import { MINUTE, recordingAlerter, recordingLogger } from './test-support.js'
+import { MINUTE, SECOND, recordingAlerter, recordingLogger } from './test-support.js'
 
 const HOUR = 60 * MINUTE
 
@@ -72,4 +72,49 @@ describe('runMorningScheduler', () => {
     assert.ok(chain.creates.length > 0)
     assert.ok(chain.creates.every((call) => call.at === start))
   })
+
+  // Red until the morning job's create backoff (morning.ts `backoff`) sleeps on the stop signal.
+  // Remove `todo` with that fix.
+  it(
+    'stops within 1 s when aborted during a create backoff, and creates nothing after',
+    { todo: 'the morning job backoff ignores the stop signal' },
+    async () => {
+      const start = sixAm('2026-10-16') + MINUTE
+      const clock = new FakeClock(start)
+      const chain = new FakeChainClient(clock)
+      chain.createHook = () => {
+        throw new Error('rpc: 503 service unavailable')
+      }
+      const controller = new AbortController()
+      const done = runMorningScheduler({
+        chain,
+        provider: {
+          async previousClose(_ticker: string, previousTradingDay: string) {
+            return { ticker: 'AAPL', tradingDay: previousTradingDay, price: 245 }
+          },
+        },
+        alerter: recordingAlerter(clock),
+        clock,
+        log: recordingLogger(clock),
+        tickers: ['AAPL'],
+        signal: controller.signal,
+      })
+      // Attempts at +0 s, +2 s and +6 s fail; the job is now in its 8 s backoff.
+      await clock.advanceBy(10 * SECOND)
+      const attempts = chain.creates.length
+      assert.ok(attempts > 0, 'the create was attempted and failed')
+
+      controller.abort()
+      // The clock stands still: only the abort can end the backoff.
+      const stopped = await Promise.race([
+        done.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SECOND)),
+      ])
+      await clock.advanceTo(start + 2 * HOUR)
+      await done
+
+      assert.equal(stopped, true, 'the scheduler resolves within 1 s of the abort')
+      assert.equal(chain.creates.length, attempts, 'no create after the abort')
+    },
+  )
 })
