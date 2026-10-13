@@ -21,7 +21,7 @@ export async function runMorningScheduler(deps: MorningSchedulerDeps): Promise<v
     const run = nextMorningRun(from)
     log.info('next morning job', {
       tradingDay: run.tradingDay,
-      at: new Date(run.startMs).toISOString(),
+      runAt: new Date(run.startMs).toISOString(),
     })
     await clock.sleep(run.startMs - clock.now(), signal)
     if (signal.aborted) return
