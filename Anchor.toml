@@ -19,11 +19,6 @@ meridian_oracle = "3HDbiFX8iSf7zXfaYmFRPNnKsjUiLvF55rHperUvjjVY"
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
-[test]
-# Deploy as upgradeable programs with the provider wallet as upgrade authority, so the lifecycle
-# tests can call initialize_config (it checks the program-data upgrade authority).
-upgradeable = true
-
 [scripts]
 test = "npx mocha --node-option import=tsx --timeout 1000000 'tests/**/*.test.ts'"
 
@@ -31,6 +26,9 @@ test = "npx mocha --node-option import=tsx --timeout 1000000 'tests/**/*.test.ts
 # shared runner host, and a longer startup wait for when that host is busy. See AGENTS.md.
 [test]
 startup_wait = 60000
+# Deploy as upgradeable programs with the provider wallet as upgrade authority, so the lifecycle
+# tests can call initialize_config (it checks the program-data upgrade authority).
+upgradeable = true
 
 [test.validator]
 rpc_port = 8899
