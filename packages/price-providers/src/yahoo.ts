@@ -2,8 +2,20 @@ import { relayConfidence } from './confidence.js'
 import { PriceSourceError } from './errors.js'
 import type { PriceSourceErrorCode } from './errors.js'
 import { isRecord, malformed } from './parse.js'
-import { REGULAR_CLOSE_SECS, REGULAR_OPEN_SECS, newYorkDay, newYorkMidnight } from './time.js'
-import type { NormalizedPrice, PreviousClose, PriceProvider, SettlementInputs } from './types.js'
+import {
+  REGULAR_CLOSE_SECS,
+  REGULAR_OPEN_SECS,
+  inRegularSession,
+  newYorkDay,
+  newYorkMidnight,
+} from './time.js'
+import type {
+  LivePriceProvider,
+  NormalizedPrice,
+  PreviousClose,
+  PriceProvider,
+  SettlementInputs,
+} from './types.js'
 
 export interface YahooSourceOptions {
   /** Injected for tests. Defaults to the global fetch. */
@@ -144,7 +156,8 @@ function barConfidence(bar: Bar): number | null {
   return relayConfidence({ barHigh: bar.high ?? undefined, barLow: bar.low ?? undefined })
 }
 
-function update(
+/** A regular-session price at the source's scale. Dollar values are float. */
+export function toNormalized(
   ticker: string,
   price: number,
   conf: number,
@@ -171,7 +184,7 @@ function officialClose(chart: YahooChart, ticker: string, closeTs: number) {
   const nextOpen = newYorkMidnight(closeTs) + DAY + REGULAR_OPEN_SECS
   const { regularMarketPrice: price, regularMarketTime: time } = chart
   if (time < closeTs || time >= nextOpen) return null
-  return update(ticker, price, 0, time, true)
+  return toNormalized(ticker, price, 0, time, true)
 }
 
 /**
@@ -194,8 +207,8 @@ function barPair(chart: YahooChart, ticker: string, closeTs: number) {
   const closingConf = barConfidence(closing)
   if (before.close === null || beforeConf === null || closingConf === null) return null
   return [
-    update(ticker, before.close, beforeConf, before.start + MINUTE - 1, false),
-    update(ticker, closing.open, closingConf, closeTs + 1, false),
+    toNormalized(ticker, before.close, beforeConf, before.start + MINUTE - 1, false),
+    toNormalized(ticker, closing.open, closingConf, closeTs + 1, false),
   ]
 }
 
@@ -208,6 +221,22 @@ export function closeInputs(
   const official = officialClose(chart, ticker, closeTs)
   const updates = official ? [official] : barPair(chart, ticker, closeTs)
   return updates ? { ticker, closeTs, updates } : null
+}
+
+/**
+ * The live price: `regularMarketPrice` at `regularMarketTime`, only while that time is inside
+ * today's regular session (09:30 to 16:00 ET on the New York day of `now`). A pre-market or
+ * previous-day stamp gives null. Like the official close it has no bid/ask, so confidence is zero.
+ */
+export function latestPrice(
+  chart: YahooChart,
+  ticker: string,
+  now: number,
+): NormalizedPrice | null {
+  const { regularMarketPrice: price, regularMarketTime: time } = chart
+  if (newYorkDay(time) !== newYorkDay(now) || time > now) return null
+  if (!inRegularSession(time, newYorkMidnight(time) + REGULAR_CLOSE_SECS)) return null
+  return toNormalized(ticker, price, 0, time, false)
 }
 
 /** Daily closes whose session has ended by `now`, oldest first. */
@@ -272,7 +301,9 @@ async function readResponse(host: string, response: Response): Promise<FetchResu
 }
 
 /** Relay source backed by the keyless Yahoo Finance chart API. */
-export function createYahooSource(options: YahooSourceOptions = {}): PriceProvider {
+export function createYahooSource(
+  options: YahooSourceOptions = {},
+): PriceProvider & LivePriceProvider {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const now = options.now ?? (() => Math.floor(Date.now() / 1000))
@@ -351,6 +382,12 @@ export function createYahooSource(options: YahooSourceOptions = {}): PriceProvid
     async previousClose(ticker, previousTradingDay) {
       const body = await getChart(ticker, { interval: '1d', range: '5d' })
       return dailyClose(parseChart(body, ticker), ticker, previousTradingDay, now())
+    },
+
+    async latest(ticker) {
+      // The daily interval keeps the response small; the meta block carries the live quote.
+      const body = await getChart(ticker, { interval: '1d', range: '1d' })
+      return latestPrice(parseChart(body, ticker), ticker, now())
     },
   }
 }

@@ -1,0 +1,46 @@
+{
+  "yahoo/AAPL-2026-10-09-1d.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1d&period1=1791207000&period2=1791576000",
+    "sha256": "ee75ae0edb164ca470c4e70262e93aa7c1dcedcb8386a88ff1792a999c285261",
+    "note": "Written by hand in the chart API v8 schema: five daily bars to the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/AAPL-2026-10-09-1m.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "fd88a2a9f14dfc2b7d474ae4e64c6b903cfc5f9644bcf4fd0efb1812c5dcc8e2",
+    "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/AAPL-2026-10-12-close.json": {
+    "origin": "recorded-transcribed",
+    "url": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1m&range=1d",
+    "capturedAt": "2026-10-13T00:20:00Z",
+    "sha256": "65bf35a8f3521f3703eca50e41eee6012ad5b212417ed2d68fdcc3a99510eb44",
+    "note": "The official AAPL close of 2026-10-12 and the last three one-minute closes, transcribed from one live response read with a browser User-Agent at about 19:20 CDT. The response bytes were not saved, so there is no checksum of them; sha256 covers this file. Fields that were not transcribed are left out."
+  },
+  "yahoo/MSFT-2026-10-09-1m.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/MSFT?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "67b4162c443c8b9d16cb9622996f5c70b7e1366ce1721f3d593fa8d5c93de141",
+    "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/MSFT-2026-10-12-1d-intraday.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/MSFT?interval=1d&range=5d",
+    "sha256": "aa8f22ed2320e0a9bab287a89c66f7b3d2d447160408e587733cef20237850bc",
+    "note": "Written by hand in the chart API v8 schema: five daily bars whose last is still in progress, so record it during the regular session. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/not-found.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/ZZZZ?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "a8f5ee328e9817c323f192f5ed5c99b640ac9119bc2ada7f92a8fb3bf265b867",
+    "note": "Written by hand in the chart API v8 schema: the error body for an unknown symbol (HTTP 404). Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/rate-limited.txt": {
+    "origin": "recorded",
+    "url": "https://query2.finance.yahoo.com/v8/finance/chart/AAPL?interval=1m&period1=1791575100&period2=1791576900",
+    "capturedAt": "2026-10-13T05:41:42Z",
+    "sha256": "1edef4f5a4b8726780da570619a5ffe0dd284a0096ea601b01bb8727f3f45757",
+    "note": "HTTP 429 body, byte for byte, from a request with a browser User-Agent."
+  }
+}

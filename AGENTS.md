@@ -75,6 +75,11 @@ Runner (`~/.gitlab-runner/config.toml` on the maintainer's Mac):
 - Global `concurrent = 1` and `check_interval = 30`.
 - The project runner `local-mac-shell` has `limit = 1` and `output_limit = 4096`.
 - Leave every other `[[runners]]` block alone. They belong to the maintainer.
+- CI validator ports: 8899-8900 plus 9600-9650 (and the faucet on 9900); workers must never use
+  them. `Anchor.toml` `[test.validator]` pins them and `[test] startup_wait` allows 60 s for a busy
+  host; gossip is pinned to 9600 because it otherwise binds 8000, which workers' validators also
+  hold. In CI, `scripts/check-validator-ports.sh` runs before `anchor test` and waits for those
+  ports to be free (checks every 30 s, up to 15 minutes), naming any process holding them.
 
 ## Quality gates
 
@@ -89,6 +94,13 @@ All local gates must pass before pushing. The Husky pre-push hook runs `make gat
 - every test suite: workspace unit tests (`node:test`), `cargo test` and the Anchor integration
   tests in `tests/` (Mocha on a local `solana-test-validator`)
 
+`make gates` and `make test` run the Anchor tests through `scripts/anchor-test.sh`. When `CI` is
+unset (the pre-push hook, local runs) it never uses CI's ports: it probes for the first free block
+(RPC 8920-8961 with the WebSocket on RPC + 1 and the faucet on RPC + 2; gossip 9010-9254 plus 40
+dynamic ports), swaps those into `Anchor.toml` `[test.validator]` for the run and restores the file
+afterwards. Pin a block with `VALIDATOR_RPC_PORT`, `VALIDATOR_FAUCET_PORT`, `VALIDATOR_GOSSIP_PORT`
+and `VALIDATOR_DYNAMIC_PORT_RANGE`. In CI it keeps the reserved block from `Anchor.toml`.
+
 `make test` runs only the test suites. Add a test with every change; work test-first where
 practical.
 
@@ -99,6 +111,15 @@ practical.
 - Program keypairs live in `target/deploy/` and are never committed. On a fresh checkout run
   `anchor keys sync` to generate them and update the program IDs, or copy in the shared devnet
   keypairs out of band.
+- The automation service ships both IDLs in `services/automation/idl/`, because a deploy has no
+  `target/`. The committed copies carry the devnet program IDs from `Anchor.toml`
+  `[programs.devnet]` throughout. After changing a program's interface, run `make ship-idls` and
+  commit the result; it maps the build's IDs to the devnet IDs, so it comes out the same on every
+  machine.
+- The IDL instructions embed program addresses, which follow each checkout's own keypairs after
+  `anchor keys sync`. So `make gates` and `make test` regenerate the shipped copies from the build
+  under test before `npm test` (the R65 drift check compares them with `target/idl`), then write
+  the committed devnet copies back. Never commit copies generated from a local or CI build.
 
 ## Local-only documents
 

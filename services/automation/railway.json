@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm ci --no-audit --no-fund",
+    "watchPatterns": ["services/automation/**", "packages/**", "package-lock.json"]
+  },
+  "deploy": {
+    "startCommand": "npm run start -w services/automation",
+    "healthcheckPath": "/healthz",
+    "healthcheckTimeout": 60,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
