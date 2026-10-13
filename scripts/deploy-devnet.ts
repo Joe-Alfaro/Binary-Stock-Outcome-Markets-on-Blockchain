@@ -136,6 +136,7 @@ async function recordToFiles(ids: ProgramIds) {
       MERIDIAN_PROGRAM_ID: ids.meridian,
       MERIDIAN_ORACLE_PROGRAM_ID: ids.meridianOracle,
       NEXT_PUBLIC_MERIDIAN_PROGRAM_ID: ids.meridian,
+      NEXT_PUBLIC_MERIDIAN_ORACLE_PROGRAM_ID: ids.meridianOracle,
     }),
   )
 }

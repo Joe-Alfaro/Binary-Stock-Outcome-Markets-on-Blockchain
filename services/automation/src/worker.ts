@@ -1,13 +1,19 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { fileURLToPath } from 'node:url'
 import anchor from '@anchor-lang/core'
 import type { Idl } from '@anchor-lang/core'
 import { createRelaySource } from '@meridian/price-providers'
 import { assertNotMainnet } from '@meridian/sdk'
 import { Connection, Keypair, PublicKey } from '@solana/web3.js'
 import { createAlerter, sinksFromEnv, type LineWriter } from './alerts/index.js'
-import { createAnchorChainClient, loadMeridianIdl, type ChainClient } from './chain/index.js'
+import {
+  DEFAULT_IDL_PATH,
+  createAnchorChainClient,
+  loadMeridianIdl,
+  loadOracleProgramId,
+  oracleIdlPath,
+  type ChainClient,
+} from './chain/index.js'
 import type { HealthState } from './health.js'
 import { runSettlementJob, systemClock, type Clock, type JobLogger } from './jobs/index.js'
 import { runMorningScheduler } from './jobs/scheduler.js'
@@ -16,9 +22,6 @@ const { utils } = anchor
 
 const DEVNET_RPC_URL = 'https://api.devnet.solana.com'
 const DEFAULT_LOCAL_RPC_PORT = '8899'
-const DEFAULT_IDL_PATH = fileURLToPath(
-  new URL('../../../target/idl/meridian.json', import.meta.url),
-)
 const SECRET_KEY_BYTES = 64
 
 /** What the worker needs to reach the chain, from the environment. */
@@ -137,9 +140,9 @@ export function startWorker(health: HealthState, env: NodeJS.ProcessEnv = proces
     connection: new Connection(settings.rpcUrl, 'confirmed'),
     authority: parseKeypair(settings.automationKeypair),
     idl: settings.programId ? { ...idl, address: settings.programId } : idl,
-    ...(settings.oracleProgramId
-      ? { oracleProgramId: new PublicKey(settings.oracleProgramId) }
-      : {}),
+    oracleProgramId: settings.oracleProgramId
+      ? new PublicKey(settings.oracleProgramId)
+      : loadOracleProgramId(oracleIdlPath(settings.idlPath)),
   })
   const clock = systemClock
   const log = createJobLogger(console.log, clock)

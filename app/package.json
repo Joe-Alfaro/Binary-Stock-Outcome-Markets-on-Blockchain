@@ -9,7 +9,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --import ./tests/support/dom.ts --test 'tests/**/*.test.ts' 'tests/**/*.test.tsx'",
+    "test": "node --import tsx --import ./tests/support/dom.ts --import ./tests/support/env.ts --test 'tests/**/*.test.ts' 'tests/**/*.test.tsx'",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

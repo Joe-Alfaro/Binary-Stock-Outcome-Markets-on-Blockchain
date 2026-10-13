@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import anchor from '@anchor-lang/core'
 import type { Idl } from '@anchor-lang/core'
 import { PublicKey } from '@solana/web3.js'
@@ -40,16 +42,40 @@ const { AnchorProvider, BN, Program, Wallet, utils } = anchor
 /** Sub-second finality: every read and write waits for `confirmed`. */
 const COMMITMENT = 'confirmed'
 const DEFAULT_RETRY = { attempts: 3, baseDelayMs: 500 }
-/** The `meridian_oracle` program's declared ID; close records live under it. */
-export const MERIDIAN_ORACLE_PROGRAM_ID = new PublicKey(
-  '3HDbiFX8iSf7zXfaYmFRPNnKsjUiLvF55rHperUvjjVY',
-)
-
 const encoder = new TextEncoder()
 
+/** The `meridian` IDL `anchor build` writes, from the repo root whatever the working directory. */
+export const DEFAULT_IDL_PATH = fileURLToPath(
+  new URL('../../../../target/idl/meridian.json', import.meta.url),
+)
+
 /** The IDL `anchor build` writes, read at runtime so the worker needn't compile against `target/`. */
-export function loadMeridianIdl(path = 'target/idl/meridian.json'): Idl {
+export function loadMeridianIdl(path = DEFAULT_IDL_PATH): Idl {
   return JSON.parse(readFileSync(path, 'utf8')) as Idl
+}
+
+/** Where `anchor build` writes the `meridian_oracle` IDL, beside the `meridian` IDL at `idlPath`. */
+export function oracleIdlPath(idlPath = DEFAULT_IDL_PATH): string {
+  return join(dirname(idlPath), 'meridian_oracle.json')
+}
+
+/**
+ * The `meridian_oracle` program ID from its built IDL. `anchor keys sync` (CI, or any checkout
+ * with its own program keypairs) moves both programs to new IDs, and the `meridian` program finds
+ * close records under the oracle ID it was built with, so the oracle ID must come from the same
+ * build as the `meridian` IDL, never from a literal.
+ */
+export function loadOracleProgramId(path = oracleIdlPath()): PublicKey {
+  let text: string
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    throw new Error(
+      `no meridian_oracle IDL at ${path}: run anchor build or set MERIDIAN_ORACLE_PROGRAM_ID`,
+    )
+  }
+  return new PublicKey((JSON.parse(text) as Idl).address)
 }
 
 export interface AnchorChainClientOptions {
@@ -63,7 +89,7 @@ export interface AnchorChainClientOptions {
   idl: Idl
   /** Signs `propose_admin_price`. Only the admin CLI needs it. */
   admin?: Keypair
-  /** Defaults to the declared `meridian_oracle` ID. */
+  /** Defaults to the address in the built `meridian_oracle` IDL; see `loadOracleProgramId`. */
   oracleProgramId?: PublicKey
   /** Bounded retries for transport failures. Defaults to 3 tries, 500 ms then 1 s apart. */
   retry?: Partial<RetryPolicy>
@@ -71,6 +97,8 @@ export interface AnchorChainClientOptions {
 
 /** The Anchor client also lets the admin propose a fallback price (R36). */
 export interface AnchorChainClient extends ChainClient {
+  /** The `meridian_oracle` program the client derives close records under. */
+  readonly oracleProgramId: PublicKey
   /** Sends `propose_admin_price`; the price must be whole cents. Needs the `admin` option. */
   proposeAdminPrice(ticker: string, tradingDay: string, price: ChainPrice): Promise<void>
 }
@@ -112,7 +140,7 @@ function sleep(ms: number): Promise<void> {
  */
 export function createAnchorChainClient(options: AnchorChainClientOptions): AnchorChainClient {
   const { connection, authority, admin } = options
-  const oracleProgramId = options.oracleProgramId ?? MERIDIAN_ORACLE_PROGRAM_ID
+  const oracleProgramId = options.oracleProgramId ?? loadOracleProgramId()
   const policy: RetryPolicy = { ...DEFAULT_RETRY, sleep, ...options.retry }
   const provider = new AnchorProvider(connection, new Wallet(authority), {
     commitment: COMMITMENT,
@@ -193,6 +221,8 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
   }
 
   return {
+    oracleProgramId,
+
     async readOracleSlots() {
       const [slot1, slot2] = (await readConfig()).oracleSlots
       if (!slot1 || !slot2) throw new Error('Config has fewer than two oracle slots')
