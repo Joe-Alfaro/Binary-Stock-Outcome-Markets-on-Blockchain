@@ -1,4 +1,4 @@
-import { assertSafeTarget, guardCluster, type GenesisRpc } from './guard.js'
+import { assertDemoCluster, assertSafeTarget, guardCluster, type GenesisRpc } from './guard.js'
 import { isEntryPoint, loadDotEnv, runMain } from './lib/cli.js'
 import { explorerTxUrl } from './lib/explorer.js'
 import { loadRoleKeys, type ReadFile } from './lib/keys.js'
@@ -35,6 +35,8 @@ export interface BootstrapClient extends GenesisRpc {
   createMockUsdcMint(decimals: number): Promise<{ mint: string; signature: string }>
   initializeConfig(params: ConfigParams): Promise<string>
   registerRelaySigner(signer: string): Promise<string>
+  /** `set_demo_mode` as the admin. */
+  setDemoMode(enabled: boolean): Promise<string>
 }
 
 export interface ConfigKeys {
@@ -73,10 +75,15 @@ export function buildConfigParams(keys: ConfigKeys): ConfigParams {
   }
 }
 
-/** Guards the cluster, loads the role keys, initializes config and registers the relay signers. */
+/**
+ * Guards the cluster, loads the role keys, initializes config, turns on demo mode when
+ * DEMO_MODE=true (localnet or devnet only) and registers the relay signers.
+ */
 export async function bootstrap(options: BootstrapOptions): Promise<BootstrapResult> {
   const { env, client, readFile, mockUsdc = false, log = console.log } = options
   const target = await assertSafeTarget(env, client)
+  const demoMode = env.DEMO_MODE === 'true'
+  if (demoMode) assertDemoCluster(target.cluster)
   const keys = loadRoleKeys(env, readFile)
   const [relaySigner1] = keys.relaySigners
   if (!relaySigner1) throw new Error('RELAY_SIGNER_1_KEYPAIR is not set')
@@ -102,6 +109,7 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapRes
     usdcMint,
   })
   sent('initialize_config', await client.initializeConfig(params))
+  if (demoMode) sent('set_demo_mode', await client.setDemoMode(true))
   for (const signer of keys.relaySigners) {
     sent(
       `register relay signer ${signer.publicKey}`,

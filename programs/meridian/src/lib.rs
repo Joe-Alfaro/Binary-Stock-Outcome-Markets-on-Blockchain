@@ -3,6 +3,7 @@ use anchor_lang::prelude::*;
 pub mod errors;
 pub mod events;
 pub mod instructions;
+pub mod schedule;
 pub mod state;
 
 pub use instructions::*;
@@ -37,6 +38,13 @@ pub mod meridian {
 
     pub fn unpause(ctx: Context<AdminConfig>) -> Result<()> {
         instructions::config::handle_unpause(ctx)
+    }
+
+    /// Only in builds with the `devnet` feature, which is on by default; a mainnet build turns
+    /// it off with `--no-default-features` (D21, D52).
+    #[cfg(feature = "devnet")]
+    pub fn set_demo_mode(ctx: Context<AdminConfig>, enabled: bool) -> Result<()> {
+        instructions::config::handle_set_demo_mode(ctx, enabled)
     }
 
     pub fn create_strike_market(ctx: Context<CreateMarket>, args: CreateMarketArgs) -> Result<()> {

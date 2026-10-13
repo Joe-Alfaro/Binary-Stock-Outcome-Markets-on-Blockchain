@@ -5,6 +5,7 @@ import {
   DEVNET_GENESIS_HASH,
   MAINNET_GENESIS_HASH,
   MOCK_MINT,
+  TESTNET_GENESIS_HASH,
   fakeBootstrapClient,
   roleKeyEnv,
 } from './lib/test-support.js'
@@ -103,5 +104,68 @@ describe('bootstrap (R59, R43, R45)', () => {
       )
       assert.equal(fake.configs.length + fake.signers.length + fake.mintDecimals.length, 0)
     })
+  })
+})
+
+// R44: DEMO_MODE=true turns demo mode on after initialize_config, and only on localnet or devnet.
+describe('bootstrap demo mode (R44)', () => {
+  const demoClusters = ['devnet', 'localnet']
+  demoClusters.forEach((cluster) => {
+    it(`turns demo mode on after initialize_config on ${cluster} when DEMO_MODE=true`, async () => {
+      const { env } = roleKeyEnv()
+      const fake = fakeBootstrapClient()
+      const result = await bootstrap({
+        env: { ...env, SOLANA_CLUSTER: cluster, USDC_MINT, DEMO_MODE: 'true' },
+        client: fake.client,
+      })
+      assert.deepEqual(fake.demoModes, [true])
+      assert.ok(fake.log.indexOf('initializeConfig') < fake.log.indexOf('setDemoMode'))
+      assert.ok(result.signatures.includes('sig-demo-mode'))
+    })
+  })
+
+  it('refuses DEMO_MODE=true on testnet before sending anything', async () => {
+    const { env } = roleKeyEnv()
+    const fake = fakeBootstrapClient(TESTNET_GENESIS_HASH)
+    await assert.rejects(
+      bootstrap({
+        env: { ...env, SOLANA_CLUSTER: 'testnet', USDC_MINT, DEMO_MODE: 'true' },
+        client: fake.client,
+        mockUsdc: true,
+      }),
+      /demo/i,
+    )
+    assert.equal(
+      fake.configs.length + fake.signers.length + fake.mintDecimals.length + fake.demoModes.length,
+      0,
+    )
+  })
+
+  const offValues: [string, NodeJS.ProcessEnv][] = [
+    ['unset', {}],
+    ['false', { DEMO_MODE: 'false' }],
+  ]
+  offValues.forEach(([label, demoEnv]) => {
+    it(`leaves demo mode off when DEMO_MODE is ${label}`, async () => {
+      const { env } = roleKeyEnv()
+      const fake = fakeBootstrapClient()
+      await bootstrap({
+        env: { ...env, SOLANA_CLUSTER: 'devnet', USDC_MINT, ...demoEnv },
+        client: fake.client,
+      })
+      assert.equal(fake.configs.length, 1)
+      assert.deepEqual(fake.demoModes, [])
+    })
+  })
+
+  it('leaves demo mode off on testnet when DEMO_MODE is unset', async () => {
+    const { env } = roleKeyEnv()
+    const fake = fakeBootstrapClient(TESTNET_GENESIS_HASH)
+    await bootstrap({
+      env: { ...env, SOLANA_CLUSTER: 'testnet', USDC_MINT },
+      client: fake.client,
+    })
+    assert.equal(fake.configs.length, 1)
+    assert.deepEqual(fake.demoModes, [])
   })
 })
