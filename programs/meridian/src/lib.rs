@@ -3,6 +3,7 @@ use anchor_lang::prelude::*;
 pub mod errors;
 pub mod events;
 pub mod instructions;
+pub mod price_adapter;
 pub mod schedule;
 pub mod state;
 
@@ -87,6 +88,14 @@ pub mod meridian {
 
     pub fn settle_market(ctx: Context<SettleMarket>, slot: u8) -> Result<()> {
         instructions::settlement::handle_settle_market(ctx, slot)
+    }
+
+    pub fn settle_market_with_reports(
+        ctx: Context<SettleMarketWithReports>,
+        slot: u8,
+        reports: Vec<Vec<u8>>,
+    ) -> Result<()> {
+        instructions::settlement::handle_settle_market_with_reports(ctx, slot, reports)
     }
 
     pub fn propose_admin_price(

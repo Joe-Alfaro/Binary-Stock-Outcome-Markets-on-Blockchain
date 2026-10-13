@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — On-chain Pyth and Data Streams price adapters (`feat/oracle-adapters`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 20 LiteSVM tests for R32 (9 Pyth, 11 Data Streams)
+  with byte-exact Pyth `PriceUpdateV2` accounts and a native mock Data Streams verifier. The
+  implementation worker, without changing the tests, added a `price_adapter` module that turns
+  relay close records, Pyth receiver accounts and CPI-verified v11 reports into
+  `NormalizedPrice`, implemented `settle_market_with_reports`, and moved `settle_market` onto one
+  shared oracle-agnostic closing-price, finalize and outcome path. Third-party slots need the
+  automation authority or admin for the first settle. A two-report settle uses about 19k CU.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Lifecycle integration tests and the automation chain client (`feat/lifecycle`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
