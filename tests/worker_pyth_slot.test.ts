@@ -230,6 +230,21 @@ function plantedAccount(address: PublicKey, entry: HermesEntry) {
   })
 }
 
+/**
+ * Waits up to `timeoutMs` for this process to hold no socket to `port`. web3.js closes an idle
+ * subscription WebSocket 500 ms after its last subscription ends; a validator stopped before then
+ * leaves the socket reconnecting forever, which keeps Mocha from exiting.
+ */
+async function socketsClosed(port: number, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const args = ['-nP', '-a', '-p', String(process.pid), `-iTCP:${port}`]
+    const { stdout } = spawnSync('lsof', args, { encoding: 'utf8' })
+    if (stdout.trim() === '') return
+    await sleep(100)
+  }
+}
+
 /** Polls `check` every second until it returns a value, failing after `timeoutMs`. */
 async function eventually<T>(
   what: string,
@@ -312,6 +327,8 @@ describe('worker settles through a Pyth slot switched by update_config and env v
   }
 
   let rpcUrl = ''
+  /** The validator's RPC WebSocket port (RPC port + 1). */
+  let wsPort = 0
   let validator: ChildProcess | undefined
   let hermes: Awaited<ReturnType<typeof startHermes>> | undefined
   let worker: Worker | undefined
@@ -325,6 +342,7 @@ describe('worker settles through a Pyth slot switched by update_config and env v
     const oracleIdl = builtIdl('meridian_oracle')
     const ports = validatorPorts(process.env)
     rpcUrl = `http://127.0.0.1:${ports.rpc}`
+    wsPort = ports.rpc + 1
 
     const accountDir = join(ledger, 'price-updates')
     mkdirSync(accountDir)
@@ -542,6 +560,7 @@ describe('worker settles through a Pyth slot switched by update_config and env v
     await worker?.done
     await new Promise((resolve) => (hermes ? hermes.server.close(resolve) : resolve(undefined)))
     if (validator && validator.exitCode === null) {
+      await socketsClosed(wsPort, 5 * SECOND_MS)
       const exited = new Promise((resolve) => validator?.once('exit', resolve))
       validator.kill('SIGTERM')
       await Promise.race([exited, sleep(10 * SECOND_MS)])
