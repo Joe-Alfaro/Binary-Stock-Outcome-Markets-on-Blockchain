@@ -92,4 +92,8 @@ export interface TradeBuilders {
   buildRedeem?(ctx: RedeemContext): VersionedTransaction
   /** Cancel, `settle_funds` and `redeem`, in as few transactions as fit. */
   buildCloseOutAndRedeem?(ctx: CloseOutContext): CloseOutPlan
+  /** R28 [G]: cancel one resting order and `settle_funds`. */
+  buildCancelOrder?(ctx: CloseOutContext, orderId: bigint): VersionedTransaction
+  /** R28 [G], before settlement: cancel, `settle_funds` and `merge_pair`, in as few as fit. */
+  buildCloseOutPosition?(ctx: CloseOutContext): CloseOutPlan
 }

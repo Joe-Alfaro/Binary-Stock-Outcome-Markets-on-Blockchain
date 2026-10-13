@@ -1,11 +1,13 @@
 import type { Holdings, ProgramEvent, YesBook } from '@meridian/sdk'
 import type {
+  CancelOrderRequest,
   ChainClient,
   Commitment,
   Confirmation,
   ContractSummary,
   LatestPrice,
   MarketOwner,
+  OpenOrder,
   SignedTx,
   Ticker,
   TradeIntent,
@@ -32,12 +34,18 @@ export class FakeChain implements ChainClient {
   sendError: unknown = null
   /** How many transactions close-out builds: more than one when the orders don't fit one. */
   closeOutTransactions = 1
+  /** The wallet's resting orders per market. */
+  openOrders = new Map<string, OpenOrder[]>()
+  /** How many transactions close-out-position builds. */
+  closeOutPositionTransactions = 1
 
   readonly calls = {
     getBook: [] as string[],
     buildTrade: [] as TradeIntent[],
     buildRedeem: [] as MarketOwner[],
     buildCloseOutAndRedeem: [] as MarketOwner[],
+    buildCancelOrder: [] as CancelOrderRequest[],
+    buildCloseOutPosition: [] as MarketOwner[],
     sendAndConfirm: [] as { tx: SignedTx; commitment: Commitment }[],
     getUsdcBalance: [] as string[],
   }
@@ -111,6 +119,24 @@ export class FakeChain implements ChainClient {
     }))
   }
 
+  async getOpenOrders(owner: string, market: string) {
+    void owner
+    return [...(this.openOrders.get(market) ?? [])]
+  }
+
+  async buildCancelOrder(request: CancelOrderRequest): Promise<UnsignedTx> {
+    this.calls.buildCancelOrder.push(request)
+    return { raw: { kind: 'cancel-order', request } }
+  }
+
+  async buildCloseOutPosition(request: MarketOwner): Promise<UnsignedTx[]> {
+    this.calls.buildCloseOutPosition.push(request)
+    const parts = this.closeOutPositionTransactions
+    return Array.from({ length: parts }, (_, part) => ({
+      raw: { kind: 'close-out-position', request, part, last: part === parts - 1 },
+    }))
+  }
+
   async sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation> {
     this.calls.sendAndConfirm.push({ tx, commitment })
     if (this.sendError) {
@@ -118,7 +144,39 @@ export class FakeChain implements ChainClient {
       this.sendError = null
       throw error
     }
+    this.apply(tx)
     return { signature: `sig-${this.calls.sendAndConfirm.length}` }
+  }
+
+  /**
+   * What the program does for the unwind transactions: a cancel returns the escrow to the wallet
+   * (escrowed Yes already counts in `holdings`; a bid's USDC comes back), and close-out then
+   * merges every Yes+No pair into one USDC each.
+   */
+  private apply(tx: SignedTx) {
+    const signed = (tx.raw as { signed?: unknown }).signed as
+      { kind: string; request: CancelOrderRequest; last?: boolean } | undefined
+    if (signed?.kind !== 'cancel-order' && signed?.kind !== 'close-out-position') return
+    const { market, orderId } = signed.request
+    const orders = this.openOrders.get(market) ?? []
+    const cancel = (order: OpenOrder) => {
+      if (order.side === 'Bid') this.usdcBalance += order.qty * order.priceCents * 10_000
+    }
+    if (signed.kind === 'cancel-order') {
+      orders.filter((o) => o.orderId === orderId).forEach(cancel)
+      this.openOrders.set(
+        market,
+        orders.filter((o) => o.orderId !== orderId),
+      )
+      return
+    }
+    if (signed.kind !== 'close-out-position' || !signed.last) return
+    orders.forEach(cancel)
+    this.openOrders.set(market, [])
+    const held = this.holdings.get(market) ?? { yes: 0, no: 0 }
+    const pairs = Math.min(held.yes, held.no)
+    this.holdings.set(market, { yes: held.yes - pairs, no: held.no - pairs })
+    this.usdcBalance += pairs * 1_000_000
   }
 
   /** Simulates another wallet's order landing: pushes the new book through the subscription. */

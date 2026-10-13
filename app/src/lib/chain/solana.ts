@@ -28,12 +28,14 @@ import {
 } from './layout'
 import { TICKERS } from './types'
 import type {
+  CancelOrderRequest,
   ChainClient,
   Commitment,
   Confirmation,
   ContractSummary,
   LatestPrice,
   MarketOwner,
+  OpenOrder,
   SignedTx,
   Ticker,
   TradeIntent,
@@ -507,6 +509,22 @@ class SolanaChainClient implements ChainClient {
     }
     const { ctx, height } = await this.closeOutContext(request)
     return build(ctx).transactions.map((tx) => this.wrap(tx, height))
+  }
+
+  async getOpenOrders(owner: string, market: string): Promise<OpenOrder[]> {
+    void owner
+    void market
+    throw new ChainError('Unknown', 'Open orders are not available in this build yet.')
+  }
+
+  async buildCancelOrder(request: CancelOrderRequest): Promise<UnsignedTx> {
+    void request
+    throw new ChainError('Unknown', 'Cancel order is not available in this build yet.')
+  }
+
+  async buildCloseOutPosition(request: MarketOwner): Promise<UnsignedTx[]> {
+    void request
+    throw new ChainError('Unknown', 'Close out position is not available in this build yet.')
   }
 
   async sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation> {

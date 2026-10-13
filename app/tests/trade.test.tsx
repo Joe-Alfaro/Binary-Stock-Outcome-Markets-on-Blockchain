@@ -416,3 +416,130 @@ describe('R56 trade page accessibility', () => {
     await assertNoAxeViolations(container)
   })
 })
+
+describe('R28 [G] unwind a resting Buy No before settlement', () => {
+  /**
+   * The wallet started with $100, minted 5 pairs for a Buy No 5 limit at 41¢, and the Yes leg
+   * rests as an ask at 59¢. It holds 5 No and 5 Yes (in escrow): both sides of one strike.
+   */
+  function hedged(): Harness {
+    const harness = setup()
+    harness.chain.usdcBalance = 95_000_000
+    harness.chain.holdings.set(MARKET, { yes: 5, no: 5 })
+    harness.chain.openOrders.set(MARKET, [{ orderId: '7', side: 'Ask', priceCents: 59, qty: 5 }])
+    return harness
+  }
+
+  async function openHedged(harness: Harness) {
+    const user = userEvent.setup()
+    renderWith(harness, <TradePage ticker="AAPL" />)
+    await selectStrike(user, '$230.00')
+    await screen.findByText('You hold 5 Yes and 5 No for this strike.')
+    return user
+  }
+
+  async function expectClosedOut() {
+    assert.ok(await screen.findByText('You hold 0 Yes and 0 No for this strike.'))
+    assert.ok(await screen.findByText(/100\.00 USDC/), 'the $5 locked in the pairs is back')
+    assert.equal(screen.queryByRole('button', { name: /cancel order/i }), null)
+  }
+
+  it('shows Cancel order and Close out position to a wallet holding both through a resting Buy No', async () => {
+    const harness = hedged()
+    await openHedged(harness)
+
+    // Buy Yes is blocked while it holds No (R28), but the unwind stays available.
+    assert.ok(await screen.findByRole('alert'))
+    const cancel = await screen.findByRole('button', { name: /cancel order/i })
+    const closeOut = await screen.findByRole('button', { name: /close out position/i })
+    assert.equal((cancel as HTMLButtonElement).disabled, false)
+    assert.equal((closeOut as HTMLButtonElement).disabled, false)
+    assert.ok(await screen.findByText(/95\.00 USDC/), 'the wallet USDC balance is shown')
+    assert.equal(harness.wallet.signPrompts, 0)
+  })
+
+  it('offers no Cancel order without a resting order, or without a connected wallet', async () => {
+    const harness = setup()
+    harness.chain.holdings.set(MARKET, { yes: 0, no: 5 })
+    const user = userEvent.setup()
+    const { unmount } = renderWith(harness, <TradePage ticker="AAPL" />)
+    await selectStrike(user, '$230.00')
+    await screen.findByText('You hold 0 Yes and 5 No for this strike.')
+    assert.equal(screen.queryByRole('button', { name: /cancel order/i }), null)
+    unmount()
+
+    const disconnected = hedged()
+    disconnected.wallet.publicKey = null
+    renderWith(disconnected, <TradePage ticker="AAPL" />)
+    await selectStrike(user, '$230.00')
+    await screen.findByText(/connect a wallet/i)
+    assert.equal(screen.queryByRole('button', { name: /cancel order/i }), null)
+    assert.equal(screen.queryByRole('button', { name: /close out position/i }), null)
+  })
+
+  it('Close out position signs once, confirms, and leaves Yes 0 and No 0 with the USDC back', async () => {
+    const harness = hedged()
+    const user = await openHedged(harness)
+    await user.click(await screen.findByRole('button', { name: /close out position/i }))
+
+    await waitFor(() => assert.equal(harness.chain.calls.sendAndConfirm.length, 1))
+    assert.deepEqual(harness.chain.calls.buildCloseOutPosition, [{ market: MARKET, owner: WALLET }])
+    assert.equal(harness.wallet.signPrompts, 1)
+    assert.equal(harness.chain.calls.sendAndConfirm[0]?.commitment, 'confirmed')
+    assert.deepEqual(harness.chain.calls.buildTrade, [], 'no trade is placed')
+    await expectClosedOut()
+  })
+
+  it('Cancel order returns the Yes to the wallet, then Close out position merges the pairs', async () => {
+    const harness = hedged()
+    const user = await openHedged(harness)
+    await user.click(await screen.findByRole('button', { name: /cancel order/i }))
+
+    await waitFor(() => assert.equal(harness.chain.calls.sendAndConfirm.length, 1))
+    assert.deepEqual(harness.chain.calls.buildCancelOrder, [
+      { market: MARKET, owner: WALLET, orderId: '7' },
+    ])
+    assert.equal(harness.wallet.signPrompts, 1)
+    await waitFor(() => assert.equal(screen.queryByRole('button', { name: /cancel order/i }), null))
+    assert.ok(screen.getByText('You hold 5 Yes and 5 No for this strike.'))
+
+    await user.click(await screen.findByRole('button', { name: /close out position/i }))
+    await waitFor(() => assert.equal(harness.chain.calls.sendAndConfirm.length, 2))
+    assert.equal(harness.wallet.signPrompts, 2)
+    await expectClosedOut()
+  })
+
+  it('a split close-out signs and confirms each transaction in order', async () => {
+    const harness = hedged()
+    harness.chain.closeOutPositionTransactions = 2
+    const user = await openHedged(harness)
+    await user.click(await screen.findByRole('button', { name: /close out position/i }))
+
+    await waitFor(() => assert.equal(harness.chain.calls.sendAndConfirm.length, 2))
+    assert.equal(harness.wallet.signPrompts, 2)
+    assert.deepEqual(
+      harness.chain.calls.sendAndConfirm.map(
+        ({ tx }) => (tx.raw as { signed: { part: number } }).signed.part,
+      ),
+      [0, 1],
+    )
+    await expectClosedOut()
+  })
+
+  it('explains a rejected signature and sends nothing', async () => {
+    const harness = hedged()
+    harness.wallet.rejectNextSign = true
+    const user = await openHedged(harness)
+    await user.click(await screen.findByRole('button', { name: /close out position/i }))
+
+    await waitFor(() =>
+      assert.ok(
+        screen
+          .getAllByRole('alert')
+          .some((alert) => /rejected the signature/i.test(alert.textContent ?? '')),
+      ),
+    )
+    assert.equal(harness.chain.calls.sendAndConfirm.length, 0)
+    assert.ok(screen.getByText('You hold 5 Yes and 5 No for this strike.'))
+  })
+})
