@@ -55,6 +55,10 @@ pub mod meridian {
         instructions::collateral::handle_merge_pair(ctx, n)
     }
 
+    pub fn merge_pair_up_to(ctx: Context<Collateral>, max_n: u64, keep_yes: u64) -> Result<()> {
+        instructions::collateral::handle_merge_pair_up_to(ctx, max_n, keep_yes)
+    }
+
     pub fn place_order(
         ctx: Context<PlaceOrder>,
         side: Side,

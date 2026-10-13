@@ -2,6 +2,20 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+
+## 2026-10-12 — Trade paths (`feat/trade-paths`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 22 red LiteSVM tests for the four trade paths and
+  `merge_pair_up_to`, and 24 red `node:test` tests pinning the SDK builders. The implementation
+  worker wrote `merge_pair_up_to` (merges `min(new Yes, No, max_n)` and shares the burn and
+  payout code with `merge_pair`) and the four builders in `packages/sdk/src/tx`: one v0
+  transaction signed only by the wallet, a compute unit limit, idempotent token-account creation,
+  then `mint_pair` / `place_order` / `settle_funds` / `merge_pair_up_to` as each path needs,
+  optional lookup tables, R28 position errors and `RangeError` for invalid orders. It didn't
+  change the tests.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Order book (`feat/orderbook`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
@@ -94,6 +108,7 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   `OracleClient` for `meridian_oracle`. It also added `latest()` to the Yahoo and mock sources,
   writing its own tests for that method and for the client's PDA and argument encoding.
 - **Human review:** pending MR review.
+
 
 ## 2026-10-12 — Price providers (`feat/providers`)
 
