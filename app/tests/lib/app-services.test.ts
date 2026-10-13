@@ -12,4 +12,11 @@ describe('app services', () => {
     assert.equal(builders.buildBuyNoTransaction, sdk.buildBuyNoTransaction)
     assert.equal(builders.buildSellNoTransaction, sdk.buildSellNoTransaction)
   })
+
+  it('give the chain client the SDK redeem and close-out builders', () => {
+    const builders = appChainConfig().builders
+    assert.ok(builders, 'no builders configured')
+    assert.equal(builders.buildRedeem, sdk.buildRedeem)
+    assert.equal(builders.buildCloseOutAndRedeem, sdk.buildCloseOutAndRedeem)
+  })
 })

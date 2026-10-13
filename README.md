@@ -305,15 +305,15 @@ Every direct dependency in the npm and Cargo manifests, with the reason it's the
 
 Built and tested: both programs (markets, mint and merge, the order book, the four trade paths,
 settlement, the admin fallback and redeem), the shared math in Rust and TypeScript, the SDK trade
-builders and trading logic, the price sources, the trading calendar, alert sinks, morning and
-settlement jobs, the relay publisher, the ops scripts, and the web app (Landing, Markets, Trade,
-Portfolio and History pages, Phantom and Solflare wallets, live book and prices). The web app
-trades through the SDK trade builders.
+builders, redeem and close-out builders and trading logic, the price sources, the trading
+calendar, alert sinks, morning and settlement jobs, the relay publisher, the ops scripts, and the
+web app (Landing, Markets, Trade, Portfolio and History pages, Phantom and Solflare wallets, live
+book and prices). The web app trades and redeems through the SDK builders. Close out orders and
+redeem is one transaction unless the wallet has more resting orders than fit in one; then the
+wallet approves each transaction in order.
 
 Not finished yet:
 
-- Redeem from the web app. The SDK has no redeem or close-out-and-redeem builders yet, so the
-  Portfolio's redeem buttons report that redeem isn't available in this build.
 - The worker's entry point serves `/healthz` but doesn't yet start the scheduler, jobs and relay
   publisher. Each piece is tested on its own.
 - The admin CLI (config updates, propose and finalize admin price, pause) and the rent measurement

@@ -123,6 +123,24 @@ describe('R52 positions', () => {
     assert.equal(harness.wallet.signPrompts, 1)
   })
 
+  it('a split close-out signs and confirms each transaction in order', async () => {
+    const harness = setup()
+    harness.chain.closeOutTransactions = 2
+    const user = userEvent.setup()
+    renderWith(harness, <PortfolioPage />)
+    const row = await rowFor(/^positions$/i, 'AAPL $225.00', 'Yes')
+    await user.click(within(row).getByRole('button', { name: /close out orders and redeem/i }))
+
+    assert.ok(await screen.findByText(/close out and redeem confirmed/i))
+    assert.equal(harness.wallet.signPrompts, 2)
+    assert.deepEqual(
+      harness.chain.calls.sendAndConfirm.map(
+        ({ tx }) => (tx.raw as { signed: { part: number } }).signed.part,
+      ),
+      [0, 1],
+    )
+  })
+
   it('asks to connect a wallet when none is connected', async () => {
     const harness = setup()
     harness.wallet.publicKey = null

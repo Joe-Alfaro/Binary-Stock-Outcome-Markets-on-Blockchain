@@ -103,8 +103,11 @@ export interface ChainClient {
   getEvents(owner: string): Promise<ProgramEvent[]>
   buildTrade(intent: TradeIntent): Promise<UnsignedTx>
   buildRedeem(request: MarketOwner): Promise<UnsignedTx>
-  /** Cancels resting orders, settles funds and redeems, in one transaction. */
-  buildCloseOutAndRedeem(request: MarketOwner): Promise<UnsignedTx>
+  /**
+   * Cancels resting orders, settles funds and redeems: one transaction, or several in order when
+   * the wallet has more orders than one transaction fits.
+   */
+  buildCloseOutAndRedeem(request: MarketOwner): Promise<UnsignedTx[]>
   sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation>
 }
 
