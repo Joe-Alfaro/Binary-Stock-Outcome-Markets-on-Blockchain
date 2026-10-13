@@ -1829,6 +1829,8 @@ dependencies = [
  "anchor-spl",
  "bytemuck",
  "litesvm",
+ "meridian-math",
+ "meridian_oracle",
  "solana-account",
  "solana-instruction-error",
  "solana-keypair",

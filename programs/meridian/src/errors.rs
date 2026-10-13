@@ -41,4 +41,31 @@ pub enum MeridianError {
     OrderNotFound,
     #[msg("The signer has no seat in this book")]
     NoSeat,
+    // ---- settlement ----
+    #[msg("The market has not reached its close yet")]
+    SettleTooEarly,
+    #[msg("Oracle account is not the canonical close record for this slot, ticker and day")]
+    InvalidOracleAccount,
+    #[msg("The oracle slot is disabled")]
+    OracleSlotDisabled,
+    #[msg("A price update is too far from close_ts")]
+    StalePrice,
+    #[msg("A price update's confidence band is too wide")]
+    ConfidenceTooWide,
+    #[msg("A price must be positive")]
+    NonPositivePrice,
+    #[msg("A price update is outside the regular session")]
+    OutsideRegularSession,
+    #[msg("The price updates form no valid closing-price shape")]
+    NoValidClosePrice,
+    #[msg("The market is not settled yet")]
+    MarketNotSettled,
+    #[msg("The ticker-day already has its final price")]
+    TickerDayFinal,
+    #[msg("Too early to propose an admin price")]
+    AdminProposeTooEarly,
+    #[msg("Too early to finalize the admin price")]
+    AdminFinalizeTooEarly,
+    #[msg("No admin price is pending")]
+    NoPendingAdminPrice,
 }

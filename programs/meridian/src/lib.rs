@@ -72,6 +72,31 @@ pub mod meridian {
     pub fn settle_funds(ctx: Context<SettleFunds>) -> Result<()> {
         instructions::orderbook::handle_settle_funds(ctx)
     }
+
+    pub fn settle_market(ctx: Context<SettleMarket>, slot: u8) -> Result<()> {
+        instructions::settlement::handle_settle_market(ctx, slot)
+    }
+
+    pub fn propose_admin_price(
+        ctx: Context<ProposeAdminPrice>,
+        ticker: [u8; 8],
+        trading_day: u32,
+        price: i64,
+    ) -> Result<()> {
+        instructions::settlement::handle_propose_admin_price(ctx, ticker, trading_day, price)
+    }
+
+    pub fn finalize_admin_settle(
+        ctx: Context<FinalizeAdminSettle>,
+        ticker: [u8; 8],
+        trading_day: u32,
+    ) -> Result<()> {
+        instructions::settlement::handle_finalize_admin_settle(ctx, ticker, trading_day)
+    }
+
+    pub fn redeem(ctx: Context<Redeem>, yes_amount: u64, no_amount: u64) -> Result<()> {
+        instructions::settlement::handle_redeem(ctx, yes_amount, no_amount)
+    }
 }
 
 #[derive(Accounts)]

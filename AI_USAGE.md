@@ -14,6 +14,29 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   limit order stopped by the fill cap. The maximum sweep uses about 80k compute units.
 - **Human review:** pending MR review.
 
+## 2026-10-12 — Settlement (`feat/settlement`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 65 red LiteSVM tests and the instruction stubs for
+  `settle_market`, `propose_admin_price`, `finalize_admin_settle` and `redeem`. The
+  implementation worker wrote the handlers: close-record validation (owner, type, canonical PDA
+  for the slot signer, ticker and day, `close_ts`), the closing-price rule and exact outcome
+  through `meridian-math`, one final price per ticker and day stored as an exact rational on the
+  `TickerDay`, the delayed admin fallback, the `AdminPriceMismatch` event, and redeem paid from
+  the collateral counter. Tests were not changed by the implementation.
+- **Human review:** pending MR review.
+
+## 2026-10-13 — Settlement math (`feat/math`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), as a TDD pair: one session wrote the red tests and
+  shared fixtures, a second implemented them.
+- **What the AI did:** implemented the closing-price rule (validation, official close, exact
+  timestamp and exact-rational interpolation), the payout rule and the strike ladder in the
+  `no_std` crate `crates/meridian-math`, and the bigint TypeScript twin in
+  `packages/sdk/src/math`. Both pass the shared fixtures and the property tests (10,000 proptest
+  cases in Rust, 2,000 seeded cases in TS). Tests were not changed by the implementation.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Core program (`feat/core`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
@@ -60,17 +83,6 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   selection, an alerter that contains sink failures) without changing the tests.
 - **Human review:** pending MR review.
 
-## 2026-10-13 — Settlement math (`feat/math`)
-
-- **Tool:** Claude Code (Claude Opus 5.5), as a TDD pair: one session wrote the red tests and
-  shared fixtures, a second implemented them.
-- **What the AI did:** implemented the closing-price rule (validation, official close, exact
-  timestamp and exact-rational interpolation), the payout rule and the strike ladder in the
-  `no_std` crate `crates/meridian-math`, and the bigint TypeScript twin in
-  `packages/sdk/src/math`. Both pass the shared fixtures and the property tests (10,000 proptest
-  cases in Rust, 2,000 seeded cases in TS). Tests were not changed by the implementation.
-- **Human review:** pending MR review.
-
 ## 2026-10-12 — Relay publisher (`feat/relay`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
@@ -102,6 +114,8 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   implementation worker wrote the `meridian_oracle` handlers and the account constraints (PDA
   seeds, `init` for the write-once records, `init_if_needed` for the latest-price account, the
   upgrade-authority check, the registry checks) without changing the tests.
+- **Human review:** pending MR review.
+
 - **Human review:** pending MR review.
 
 - **Human review:** pending MR review.
