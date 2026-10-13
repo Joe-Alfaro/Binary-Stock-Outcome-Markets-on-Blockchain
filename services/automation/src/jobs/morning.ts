@@ -22,6 +22,8 @@ export interface MorningJobDeps {
   tradingDay: string
   /** Defaults to `TICKERS`. */
   tickers?: readonly string[]
+  /** Stops the job: waits end at once and no further fetch or create is sent. */
+  signal?: AbortSignal
 }
 
 export interface MorningJobResult {
@@ -101,19 +103,19 @@ type TickerOutcome = 'complete' | 'stale' | 'incomplete'
  * for any ticker still incomplete. Refuses a stale previous close with an alert.
  */
 export async function runMorningJob(deps: MorningJobDeps): Promise<MorningJobResult> {
-  const { chain, provider, alerter, clock, log, tradingDay, tickers = TICKERS } = deps
+  const { chain, provider, alerter, clock, log, tradingDay, tickers = TICKERS, signal } = deps
   const { alertAt, deadline } = morningWindow(tradingDay)
   const times = tradingDayTimes(tradingDay)
   const expectedPreviousDay = previousTradingDay(tradingDay)
   const startedAfterAlert = clock.now() >= alertAt
   const outcomes = new Map<string, TickerOutcome>()
 
-  /** Waits out the backoff; false once the 8:00 deadline has passed and retries should stop. */
+  /** Waits out the backoff; false once the 8:00 deadline has passed or the job was stopped. */
   async function backoff(attempt: number): Promise<boolean> {
     const remaining = deadline - clock.now()
-    if (remaining <= 0) return false
-    await clock.sleep(Math.min(backoffMs(attempt), remaining))
-    return clock.now() < deadline
+    if (remaining <= 0 || signal?.aborted) return false
+    await clock.sleep(Math.min(backoffMs(attempt), remaining), signal)
+    return !signal?.aborted && clock.now() < deadline
   }
 
   async function alertStale(ticker: string, reason: string): Promise<void> {
@@ -182,7 +184,7 @@ export async function runMorningJob(deps: MorningJobDeps): Promise<MorningJobRes
   async function runTicker(ticker: string): Promise<TickerOutcome> {
     const previousClose = await fetchPreviousClose(ticker)
     if (previousClose === 'stale') return 'stale'
-    if (!previousClose) return 'incomplete'
+    if (!previousClose || signal?.aborted) return 'incomplete'
     let pending = computeStrikes(previousClose)
     for (let attempt = 0; ; attempt += 1) {
       pending = await createRound(ticker, pending)
@@ -205,10 +207,11 @@ export async function runMorningJob(deps: MorningJobDeps): Promise<MorningJobRes
   }
 
   const finished = new AbortController()
+  const watcherSignal = signal ? AbortSignal.any([signal, finished.signal]) : finished.signal
   const watcher = (async () => {
     if (startedAfterAlert) return
-    await clock.sleep(alertAt - clock.now(), finished.signal)
-    if (finished.signal.aborted || incomplete().length === 0) return
+    await clock.sleep(alertAt - clock.now(), watcherSignal)
+    if (watcherSignal.aborted || incomplete().length === 0) return
     await alertIncomplete(incomplete())
   })()
 
@@ -223,7 +226,10 @@ export async function runMorningJob(deps: MorningJobDeps): Promise<MorningJobRes
   const incompleteTickers = incomplete()
   // A run that started after 7:30 has no 7:30 check; stale tickers were alerted already.
   const unreported = incompleteTickers.filter((ticker) => outcomes.get(ticker) !== 'stale')
-  if (startedAfterAlert && unreported.length > 0) await alertIncomplete(unreported)
+  // A stopped run is not a failure: the next start inside the window catches up.
+  if (startedAfterAlert && unreported.length > 0 && !signal?.aborted) {
+    await alertIncomplete(unreported)
+  }
   const completeTickers = tickers.filter((ticker) => outcomes.get(ticker) === 'complete')
   log.info('morning job finished', { tradingDay, completeTickers, incompleteTickers })
   return { completeTickers, incompleteTickers }

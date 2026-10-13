@@ -77,7 +77,6 @@ describe('runMorningScheduler', () => {
   // Remove `todo` with that fix.
   it(
     'stops within 1 s when aborted during a create backoff, and creates nothing after',
-    { todo: 'the morning job backoff ignores the stop signal' },
     async () => {
       const start = sixAm('2026-10-16') + MINUTE
       const clock = new FakeClock(start)
