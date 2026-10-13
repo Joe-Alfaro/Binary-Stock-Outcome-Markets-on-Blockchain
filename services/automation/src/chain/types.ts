@@ -28,6 +28,13 @@ export interface OpenMarket {
   closeTs: number
 }
 
+/** Narrows `listOpenMarkets` on-chain; every field is optional. */
+export interface OpenMarketFilter {
+  ticker?: string
+  /** `YYYY-MM-DD` in America/New_York. */
+  tradingDay?: string
+}
+
 /** Arguments of one `create_strike_market` instruction: exactly one strike. */
 export interface CreateStrikeMarketParams {
   ticker: string
@@ -69,8 +76,11 @@ export interface PendingAdminPrice {
 export interface ChainClient {
   /** The oracle slot kinds from the program's `Config`. */
   readOracleSlots(): Promise<OracleSlots>
-  /** Every `Market` that is not settled yet, from every trading day, read from the chain. */
-  listOpenMarkets(): Promise<OpenMarket[]>
+  /**
+   * Every `Market` that is not settled yet, read from the chain: from every ticker and trading
+   * day, or only those matching `filter`.
+   */
+  listOpenMarkets(filter?: OpenMarketFilter): Promise<OpenMarket[]>
   /** Sends one transaction with one `create_strike_market` instruction. */
   createStrikeMarket(params: CreateStrikeMarketParams): Promise<CreateStrikeMarketResult>
   /**
