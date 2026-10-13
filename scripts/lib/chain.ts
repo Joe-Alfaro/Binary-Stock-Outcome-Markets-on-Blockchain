@@ -335,6 +335,11 @@ export function createBootstrapClient(env: NodeJS.ProcessEnv): BootstrapClient {
       return { mint: mint.publicKey.toBase58(), signature }
     },
 
+    // Stub for the demo-mode tests (R44); the implementation worker wires it.
+    async setDemoMode() {
+      throw new Error('setDemoMode is not wired yet')
+    },
+
     async initializeConfig(params: ConfigParams) {
       await chain.fundOnLocalnet()
       const deployer = chain.deployer()

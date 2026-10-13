@@ -68,4 +68,7 @@ pub enum MeridianError {
     AdminFinalizeTooEarly,
     #[msg("No admin price is pending")]
     NoPendingAdminPrice,
+    // ---- demo mode ----
+    #[msg("Market times must follow the regular schedule unless demo mode is on")]
+    NonStandardSchedule,
 }

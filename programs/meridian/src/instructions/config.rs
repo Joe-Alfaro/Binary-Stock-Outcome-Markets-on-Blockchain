@@ -124,3 +124,8 @@ pub fn handle_unpause(ctx: Context<AdminConfig>) -> Result<()> {
     ctx.accounts.config.paused = false;
     Ok(())
 }
+
+/// Stub for the demo-mode tests (R44); the implementation worker fills it in.
+pub fn handle_set_demo_mode(_ctx: Context<AdminConfig>, _enabled: bool) -> Result<()> {
+    Ok(())
+}

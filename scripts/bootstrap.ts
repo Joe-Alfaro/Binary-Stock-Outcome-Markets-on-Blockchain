@@ -35,6 +35,8 @@ export interface BootstrapClient extends GenesisRpc {
   createMockUsdcMint(decimals: number): Promise<{ mint: string; signature: string }>
   initializeConfig(params: ConfigParams): Promise<string>
   registerRelaySigner(signer: string): Promise<string>
+  /** `set_demo_mode` as the admin. */
+  setDemoMode(enabled: boolean): Promise<string>
 }
 
 export interface ConfigKeys {

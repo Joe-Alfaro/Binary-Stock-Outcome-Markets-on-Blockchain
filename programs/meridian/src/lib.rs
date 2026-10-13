@@ -39,6 +39,10 @@ pub mod meridian {
         instructions::config::handle_unpause(ctx)
     }
 
+    pub fn set_demo_mode(ctx: Context<AdminConfig>, enabled: bool) -> Result<()> {
+        instructions::config::handle_set_demo_mode(ctx, enabled)
+    }
+
     pub fn create_strike_market(ctx: Context<CreateMarket>, args: CreateMarketArgs) -> Result<()> {
         instructions::market::handle_create_strike_market(ctx, args)
     }
