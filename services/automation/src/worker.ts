@@ -7,7 +7,13 @@ import { createRelaySource } from '@meridian/price-providers'
 import { assertNotMainnet } from '@meridian/sdk'
 import { Connection, Keypair, PublicKey } from '@solana/web3.js'
 import { createAlerter, sinksFromEnv, type LineWriter } from './alerts/index.js'
-import { createAnchorChainClient, loadMeridianIdl, type ChainClient } from './chain/index.js'
+import {
+  createAnchorChainClient,
+  loadMeridianIdl,
+  loadOracleProgramId,
+  oracleIdlPath,
+  type ChainClient,
+} from './chain/index.js'
 import type { HealthState } from './health.js'
 import { runSettlementJob, systemClock, type Clock, type JobLogger } from './jobs/index.js'
 import { runMorningScheduler } from './jobs/scheduler.js'
@@ -137,9 +143,9 @@ export function startWorker(health: HealthState, env: NodeJS.ProcessEnv = proces
     connection: new Connection(settings.rpcUrl, 'confirmed'),
     authority: parseKeypair(settings.automationKeypair),
     idl: settings.programId ? { ...idl, address: settings.programId } : idl,
-    ...(settings.oracleProgramId
-      ? { oracleProgramId: new PublicKey(settings.oracleProgramId) }
-      : {}),
+    oracleProgramId: settings.oracleProgramId
+      ? new PublicKey(settings.oracleProgramId)
+      : loadOracleProgramId(oracleIdlPath(settings.idlPath)),
   })
   const clock = systemClock
   const log = createJobLogger(console.log, clock)

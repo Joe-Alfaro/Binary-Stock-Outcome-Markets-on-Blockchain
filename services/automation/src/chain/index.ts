@@ -2,6 +2,8 @@ export {
   MERIDIAN_ORACLE_PROGRAM_ID,
   createAnchorChainClient,
   loadMeridianIdl,
+  loadOracleProgramId,
+  oracleIdlPath,
   type AnchorChainClient,
   type AnchorChainClientOptions,
 } from './anchor.js'
