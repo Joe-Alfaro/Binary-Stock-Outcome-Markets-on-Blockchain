@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
 
+pub mod orderbook;
+pub use orderbook::*;
+
 /// Base units per whole Yes, No or USDC token (6 decimals).
 pub const UNIT: u64 = 1_000_000;
 pub const TICKER_COUNT: usize = 7;
@@ -163,8 +166,8 @@ pub fn market_seeds(market: &Market) -> MarketSeeds {
     }
 }
 
-/// Order book for one market. The order-book package adds the bid/ask arrays and seats after
-/// these fields; `market` stays first.
+/// Order book for one market. The order-book fields follow the header; `market` stays first.
+/// Order and seat types live in `state/orderbook.rs`.
 #[account(zero_copy)]
 #[derive(Debug)]
 pub struct OrderBook {
@@ -174,4 +177,7 @@ pub struct OrderBook {
     pub next_seq: u64,
     pub bump: u8,
     pub _padding: [u8; 7],
+    pub bids: [Order; BOOK_SIDE_CAPACITY],
+    pub asks: [Order; BOOK_SIDE_CAPACITY],
+    pub seats: [OpenOrders; SEAT_CAPACITY],
 }

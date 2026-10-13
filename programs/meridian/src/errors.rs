@@ -26,4 +26,19 @@ pub enum MeridianError {
     CollateralInvariant,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    // Order book.
+    #[msg("Trading has not opened for this market yet")]
+    TradingNotOpen,
+    #[msg("Order price must be a whole number of cents from 1 to 99")]
+    InvalidPrice,
+    #[msg("A post-only order would cross the book")]
+    PostOnlyWouldCross,
+    #[msg("This side of the book is full")]
+    BookSideFull,
+    #[msg("Every seat in this book is taken")]
+    SeatsFull,
+    #[msg("No resting order with this ID")]
+    OrderNotFound,
+    #[msg("The signer has no seat in this book")]
+    NoSeat,
 }
