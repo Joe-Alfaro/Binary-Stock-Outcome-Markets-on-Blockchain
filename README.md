@@ -261,17 +261,20 @@ Every direct dependency in the npm and Cargo manifests, with the reason it's the
 
 ### Web app
 
-| Package                                            | Why                                                                |
-| -------------------------------------------------- | ------------------------------------------------------------------ |
-| `next`                                             | React framework, routing and production server for the web app     |
-| `react`, `react-dom`                               | UI rendering for the pages and components                          |
-| `jsdom`                                            | DOM implementation so component tests run under `node:test`        |
-| `@testing-library/react`, `@testing-library/dom`   | Render components and query them the way a user sees them          |
-| `@testing-library/user-event`                      | Simulates realistic clicks and typing in component tests           |
-| `axe-core`                                         | Accessibility rule engine run against rendered components in tests |
-| `@playwright/test`                                 | Browser end-to-end tests against the running app                   |
-| `@axe-core/playwright`                             | Runs the accessibility checks inside Playwright browser tests      |
-| `@types/react`, `@types/react-dom`, `@types/jsdom` | TypeScript types for React, React DOM and jsdom                    |
+| Package                                            | Why                                                                     |
+| -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `next`                                             | React framework, routing and production server for the web app          |
+| `react`, `react-dom`                               | UI rendering for the pages and components                               |
+| `jsdom`                                            | DOM implementation so component tests run under `node:test`             |
+| `@testing-library/react`, `@testing-library/dom`   | Render components and query them the way a user sees them               |
+| `@testing-library/user-event`                      | Simulates realistic clicks and typing in component tests                |
+| `axe-core`                                         | Accessibility rule engine run against rendered components in tests      |
+| `@playwright/test`                                 | Browser end-to-end tests against the running app                        |
+| `@axe-core/playwright`                             | Runs the accessibility checks inside Playwright browser tests           |
+| `@types/react`, `@types/react-dom`, `@types/jsdom` | TypeScript types for React, React DOM and jsdom                         |
+| `@solana/wallet-adapter-base`                      | Shared wallet adapter interface and network names for the wallet button |
+| `@solana/wallet-adapter-phantom`                   | Connects and signs with the Phantom browser wallet                      |
+| `@solana/wallet-adapter-solflare`                  | Connects and signs with the Solflare browser wallet                     |
 
 ### SDK, worker and scripts
 
@@ -303,11 +306,14 @@ Every direct dependency in the npm and Cargo manifests, with the reason it's the
 Built and tested: both programs (markets, mint and merge, the order book, the four trade paths,
 settlement, the admin fallback and redeem), the shared math in Rust and TypeScript, the SDK trade
 builders and trading logic, the price sources, the trading calendar, alert sinks, morning and
-settlement jobs, the relay publisher, and the ops scripts.
+settlement jobs, the relay publisher, the ops scripts, and the web app (Landing, Markets, Trade,
+Portfolio and History pages, Phantom and Solflare wallets, live book and prices). The web app
+trades through the SDK trade builders.
 
 Not finished yet:
 
-- The web app pages. Their tests are written; the pages are being built.
+- Redeem from the web app. The SDK has no redeem or close-out-and-redeem builders yet, so the
+  Portfolio's redeem buttons report that redeem isn't available in this build.
 - The worker's entry point serves `/healthz` but doesn't yet start the scheduler, jobs and relay
   publisher. Each piece is tested on its own.
 - The admin CLI (config updates, propose and finalize admin price, pause) and the rent measurement

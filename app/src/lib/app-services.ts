@@ -1,4 +1,12 @@
+import {
+  buildBuyNoTransaction,
+  buildBuyYesTransaction,
+  buildSellNoTransaction,
+  buildSellYesTransaction,
+} from '@meridian/sdk'
 import { createSolanaChainClient } from './chain'
+import type { TradeBuilders } from './chain/builders'
+import type { SolanaChainConfig } from './chain/solana'
 import type { Services } from './services'
 import { createWalletAdapters } from './wallet/adapters'
 import { AdapterWalletPort } from './wallet/port'
@@ -13,22 +21,36 @@ export interface AppServices extends Services {
   wallet: AdapterWalletPort
 }
 
+/** The SDK trade-path builders. The SDK has no redeem builders yet, so redeem stays unavailable. */
+export const sdkTradeBuilders: TradeBuilders = {
+  buildBuyYesTransaction,
+  buildSellYesTransaction,
+  buildBuyNoTransaction,
+  buildSellNoTransaction,
+}
+
 let instance: AppServices | null = null
 
 /**
- * The app's services, created once per page load from the `NEXT_PUBLIC_*` variables. Next.js
- * inlines each variable only when it is referenced by its full name, so they're spelled out.
+ * The chain client's configuration from the `NEXT_PUBLIC_*` variables. Next.js inlines each
+ * variable only when it is referenced by its full name, so they're spelled out.
  */
+export function appChainConfig(): SolanaChainConfig {
+  return {
+    rpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEVNET_RPC,
+    wsUrl: process.env.NEXT_PUBLIC_SOLANA_WS_URL || undefined,
+    programId: process.env.NEXT_PUBLIC_MERIDIAN_PROGRAM_ID || PROGRAM_ID,
+    oracleProgramId: process.env.NEXT_PUBLIC_MERIDIAN_ORACLE_PROGRAM_ID || ORACLE_PROGRAM_ID,
+    relaySigner: process.env.NEXT_PUBLIC_RELAY_SIGNER_1 || NO_RELAY_SIGNER,
+    builders: sdkTradeBuilders,
+  }
+}
+
+/** The app's services, created once per page load. */
 export function getAppServices(): AppServices {
   if (instance) return instance
   instance = {
-    chain: createSolanaChainClient({
-      rpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEVNET_RPC,
-      wsUrl: process.env.NEXT_PUBLIC_SOLANA_WS_URL || undefined,
-      programId: process.env.NEXT_PUBLIC_MERIDIAN_PROGRAM_ID || PROGRAM_ID,
-      oracleProgramId: process.env.NEXT_PUBLIC_MERIDIAN_ORACLE_PROGRAM_ID || ORACLE_PROGRAM_ID,
-      relaySigner: process.env.NEXT_PUBLIC_RELAY_SIGNER_1 || NO_RELAY_SIGNER,
-    }),
+    chain: createSolanaChainClient(appChainConfig()),
     wallet: new AdapterWalletPort(createWalletAdapters()),
     now: () => Math.floor(Date.now() / 1000),
   }
