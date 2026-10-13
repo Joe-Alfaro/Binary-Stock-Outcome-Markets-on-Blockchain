@@ -60,7 +60,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function slotEnabled(slots: OracleSlots, slot: OracleSlot): boolean {
+/** Enabled in `Config` and not disabled by this worker's `ORACLE_SLOT_<n>`. */
+function slotEnabled(
+  slots: OracleSlots,
+  slot: OracleSlot,
+  settings: OracleSlotSettings | undefined,
+): boolean {
+  const setting = slot === 1 ? settings?.slot1 : settings?.slot2
+  if (setting?.kind === 'disabled') return false
   return (slot === 1 ? slots.slot1 : slots.slot2) !== 'Disabled'
 }
 
@@ -111,7 +118,9 @@ class TickerDaySettler {
 
     while (!signal.aborted && !this.#done) {
       const slots = this.#ctx.slots()
-      const polled = ([1, 2] as const).filter((slot) => slotEnabled(slots, slot))
+      const polled = ([1, 2] as const).filter((slot) =>
+        slotEnabled(slots, slot, this.#ctx.slotSettings),
+      )
       const wakeAt = Math.min(
         ...polled.map((slot) => next[slot]),
         next.admin,
