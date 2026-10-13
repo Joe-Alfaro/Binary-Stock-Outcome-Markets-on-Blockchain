@@ -14,6 +14,18 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   automation authority or admin for the first settle. A two-report settle uses about 19k CU.
 - **Human review:** pending MR review.
 
+## 2026-10-13 — Worker relay wiring, invariant alerts and shipped IDLs (`feat/worker-wiring`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** without changing the tests, made `startWorker` require
+  `RELAY_SIGNER_1_KEYPAIR` and run the slot-1 relay: a close publisher driven by open markets past
+  `close_ts`, and the latest-price loop, which skips tickers the source can't price. Both record
+  relay publishes in `/healthz`. Added `listMarketCollateral` to the chain client and a per-minute
+  invariant audit that sends `invariant_failure` alerts. Shipped both IDLs in
+  `services/automation/idl/` (`make ship-idls`) so a clean deploy starts without `target/`.
+  Logged the choices as D69.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Lifecycle integration tests and the automation chain client (`feat/lifecycle`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

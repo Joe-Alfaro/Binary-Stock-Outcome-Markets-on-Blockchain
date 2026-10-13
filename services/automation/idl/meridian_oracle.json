@@ -1,0 +1,893 @@
+{
+  "address": "3HDbiFX8iSf7zXfaYmFRPNnKsjUiLvF55rHperUvjjVY",
+  "metadata": {
+    "name": "meridian_oracle",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Relay price updates"
+  },
+  "instructions": [
+    {
+      "name": "add_signer",
+      "docs": [
+        "Admin only. Registers a relay signer."
+      ],
+      "discriminator": [
+        76,
+        104,
+        61,
+        51,
+        179,
+        139,
+        47,
+        222
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "signer",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "initialize_registry",
+      "docs": [
+        "Creates the `SignerRegistry` at `[\"signers\"]` with `admin` as its admin. Only the program's",
+        "upgrade authority may call it, so nobody can front-run it after deploy."
+      ],
+      "discriminator": [
+        189,
+        181,
+        20,
+        17,
+        174,
+        57,
+        249,
+        59
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Must be the program's upgrade authority. Pays for the registry."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program",
+          "address": "3HDbiFX8iSf7zXfaYmFRPNnKsjUiLvF55rHperUvjjVY"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "ping",
+      "docs": [
+        "Placeholder instruction so the scaffold builds, deploys and has a smoke test."
+      ],
+      "discriminator": [
+        173,
+        0,
+        94,
+        236,
+        73,
+        133,
+        225,
+        153
+      ],
+      "accounts": [],
+      "args": []
+    },
+    {
+      "name": "publish_close",
+      "docs": [
+        "Registered signer only. Creates the write-once `CloseRecord` at",
+        "`[\"close\", signer, ticker, trading_day (u32 LE)]` from the signer's own `PriceUpdate`s for",
+        "that ticker. One update forms an official close (flagged) or an exact-timestamp close",
+        "(`publish_time == close_ts`); two updates form an interpolation pair",
+        "(`first.publish_time < close_ts < second.publish_time`)."
+      ],
+      "discriminator": [
+        231,
+        184,
+        202,
+        48,
+        113,
+        101,
+        77,
+        28
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "The relay signer. Pays for the record."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "close_record",
+          "docs": [
+            "`init` makes the record write-once: any second call for the same key fails."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  108,
+                  111,
+                  115,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "signer"
+              },
+              {
+                "kind": "arg",
+                "path": "ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "trading_day"
+              }
+            ]
+          }
+        },
+        {
+          "name": "first_update",
+          "docs": [
+            "`Account` checks the owner and the `PriceUpdate` discriminator, so only updates this program",
+            "wrote through `publish_price` are accepted."
+          ]
+        },
+        {
+          "name": "second_update",
+          "docs": [
+            "The second `PriceUpdate` of an interpolation pair."
+          ],
+          "optional": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": [
+              "u8",
+              8
+            ]
+          }
+        },
+        {
+          "name": "trading_day",
+          "type": "u32"
+        },
+        {
+          "name": "close_ts",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "publish_latest",
+      "docs": [
+        "Registered signer only. Creates or overwrites in place the `LatestPrice` at",
+        "`[\"latest\", signer, ticker]`. `publish_time` must be strictly greater than the stored one."
+      ],
+      "discriminator": [
+        37,
+        218,
+        206,
+        235,
+        156,
+        19,
+        233,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "The relay signer. Pays for the account the first time."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "latest_price",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  97,
+                  116,
+                  101,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "signer"
+              },
+              {
+                "kind": "arg",
+                "path": "ticker"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": [
+              "u8",
+              8
+            ]
+          }
+        },
+        {
+          "name": "input",
+          "type": {
+            "defined": {
+              "name": "PriceInput"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "publish_price",
+      "docs": [
+        "Registered signer only. Creates an append-only `PriceUpdate` at",
+        "`[\"price\", signer, ticker, publish_time (i64 LE)]`."
+      ],
+      "discriminator": [
+        117,
+        13,
+        6,
+        171,
+        29,
+        204,
+        11,
+        1
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "The relay signer. Pays for the record."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "price_update",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "signer"
+              },
+              {
+                "kind": "arg",
+                "path": "ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "input.publish_time"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": [
+              "u8",
+              8
+            ]
+          }
+        },
+        {
+          "name": "input",
+          "type": {
+            "defined": {
+              "name": "PriceInput"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "remove_signer",
+      "docs": [
+        "Admin only. Deregisters a relay signer; it can no longer publish."
+      ],
+      "discriminator": [
+        212,
+        32,
+        97,
+        47,
+        61,
+        67,
+        184,
+        141
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  115
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "signer",
+          "type": "pubkey"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "CloseRecord",
+      "discriminator": [
+        162,
+        63,
+        4,
+        230,
+        187,
+        128,
+        12,
+        166
+      ]
+    },
+    {
+      "name": "LatestPrice",
+      "discriminator": [
+        37,
+        138,
+        32,
+        102,
+        133,
+        25,
+        241,
+        164
+      ]
+    },
+    {
+      "name": "PriceUpdate",
+      "discriminator": [
+        105,
+        54,
+        115,
+        246,
+        58,
+        216,
+        66,
+        178
+      ]
+    },
+    {
+      "name": "SignerRegistry",
+      "discriminator": [
+        37,
+        94,
+        245,
+        241,
+        133,
+        24,
+        160,
+        60
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotUpgradeAuthority",
+      "msg": "Signer is not the program's upgrade authority"
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "Signer is not the registry admin"
+    },
+    {
+      "code": 6002,
+      "name": "UnregisteredSigner",
+      "msg": "Signer is not a registered relay signer"
+    },
+    {
+      "code": 6003,
+      "name": "SignerAlreadyRegistered",
+      "msg": "Signer is already registered"
+    },
+    {
+      "code": 6004,
+      "name": "RegistryFull",
+      "msg": "Signer registry is full"
+    },
+    {
+      "code": 6005,
+      "name": "PublishTimeInFuture",
+      "msg": "publish_time is more than 60 s in the future"
+    },
+    {
+      "code": 6006,
+      "name": "PublishTimeNotIncreasing",
+      "msg": "publish_time must be greater than the stored one"
+    },
+    {
+      "code": 6007,
+      "name": "UpdateMismatch",
+      "msg": "Price update is from another signer or for another ticker"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidCloseShape",
+      "msg": "Price updates don't form a valid close shape"
+    }
+  ],
+  "types": [
+    {
+      "name": "CloseRecord",
+      "docs": [
+        "`[\"close\", signer, ticker, trading_day]`. Write-once; the only relay account settlement reads."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "signer",
+            "type": "pubkey"
+          },
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "trading_day",
+            "docs": [
+              "`YYYYMMDD`."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "close_ts",
+            "type": "i64"
+          },
+          {
+            "name": "shape",
+            "type": {
+              "defined": {
+                "name": "CloseShape"
+              }
+            }
+          },
+          {
+            "name": "first",
+            "docs": [
+              "The official close, the exact-timestamp update, or the update before `close_ts`."
+            ],
+            "type": {
+              "defined": {
+                "name": "PriceInput"
+              }
+            }
+          },
+          {
+            "name": "second",
+            "docs": [
+              "The update after `close_ts` for an interpolation pair; `None` otherwise."
+            ],
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "PriceInput"
+                }
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CloseShape",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "OfficialClose"
+          },
+          {
+            "name": "ExactTimestamp"
+          },
+          {
+            "name": "Interpolation"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LatestPrice",
+      "docs": [
+        "`[\"latest\", signer, ticker]`. Overwritten in place; display only, never a settlement input."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "signer",
+            "type": "pubkey"
+          },
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "price",
+            "type": "i64"
+          },
+          {
+            "name": "conf",
+            "type": "u64"
+          },
+          {
+            "name": "expo",
+            "type": "i32"
+          },
+          {
+            "name": "publish_time",
+            "type": "i64"
+          },
+          {
+            "name": "session",
+            "type": {
+              "defined": {
+                "name": "Session"
+              }
+            }
+          },
+          {
+            "name": "official_close",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PriceInput",
+      "docs": [
+        "One price as the source reported it, modeled on a Pyth price update: `price × 10^expo`, with",
+        "`conf` on the same scale and `publish_time` the source's timestamp in unix seconds."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "price",
+            "type": "i64"
+          },
+          {
+            "name": "conf",
+            "type": "u64"
+          },
+          {
+            "name": "expo",
+            "type": "i32"
+          },
+          {
+            "name": "publish_time",
+            "type": "i64"
+          },
+          {
+            "name": "session",
+            "type": {
+              "defined": {
+                "name": "Session"
+              }
+            }
+          },
+          {
+            "name": "official_close",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PriceUpdate",
+      "docs": [
+        "`[\"price\", signer, ticker, publish_time]`. Append-only."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "signer",
+            "type": "pubkey"
+          },
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "price",
+            "type": "i64"
+          },
+          {
+            "name": "conf",
+            "type": "u64"
+          },
+          {
+            "name": "expo",
+            "type": "i32"
+          },
+          {
+            "name": "publish_time",
+            "type": "i64"
+          },
+          {
+            "name": "session",
+            "type": {
+              "defined": {
+                "name": "Session"
+              }
+            }
+          },
+          {
+            "name": "official_close",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Session",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Regular"
+          },
+          {
+            "name": "OutsideRegular"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SignerRegistry",
+      "docs": [
+        "`[\"signers\"]`. Admin-controlled list of relay signers."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "signers",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}

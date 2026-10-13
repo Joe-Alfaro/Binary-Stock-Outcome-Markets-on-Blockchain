@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import anchor from '@anchor-lang/core'
@@ -26,6 +26,7 @@ import {
   tradingDayString,
   u32Le,
 } from './codec.js'
+import type { MarketCollateral } from '../invariants.js'
 import { errorText, withRetry, type RetryPolicy } from './retry.js'
 import type {
   ChainClient,
@@ -44,17 +45,28 @@ const COMMITMENT = 'confirmed'
 const DEFAULT_RETRY = { attempts: 3, baseDelayMs: 500 }
 const encoder = new TextEncoder()
 
-/** The `meridian` IDL `anchor build` writes, from the repo root whatever the working directory. */
-export const DEFAULT_IDL_PATH = fileURLToPath(
-  new URL('../../../../target/idl/meridian.json', import.meta.url),
-)
+/** Where `anchor build` writes the IDLs, from the repo root whatever the working directory. */
+const BUILT_IDL_DIR = fileURLToPath(new URL('../../../../target/idl/', import.meta.url))
+/**
+ * The IDLs this service ships (`make ship-idls`), for a deploy that has no `target/`. Their
+ * program IDs are the declared ones; a fresh build in this checkout takes precedence.
+ */
+const SHIPPED_IDL_DIR = fileURLToPath(new URL('../../idl/', import.meta.url))
 
-/** The IDL `anchor build` writes, read at runtime so the worker needn't compile against `target/`. */
+/** The directory holding both program IDLs: this checkout's build, else the shipped copies. */
+export const DEFAULT_IDL_DIR = existsSync(join(BUILT_IDL_DIR, 'meridian.json'))
+  ? BUILT_IDL_DIR
+  : SHIPPED_IDL_DIR
+
+/** The `meridian` IDL the worker loads unless `MERIDIAN_IDL_PATH` names another. */
+export const DEFAULT_IDL_PATH = join(DEFAULT_IDL_DIR, 'meridian.json')
+
+/** The `meridian` IDL, read at runtime so the worker needn't compile against `target/`. */
 export function loadMeridianIdl(path = DEFAULT_IDL_PATH): Idl {
   return JSON.parse(readFileSync(path, 'utf8')) as Idl
 }
 
-/** Where `anchor build` writes the `meridian_oracle` IDL, beside the `meridian` IDL at `idlPath`. */
+/** The `meridian_oracle` IDL beside the `meridian` IDL at `idlPath`, as `anchor build` writes them. */
 export function oracleIdlPath(idlPath = DEFAULT_IDL_PATH): string {
   return join(dirname(idlPath), 'meridian_oracle.json')
 }
@@ -101,6 +113,8 @@ export interface AnchorChainClient extends ChainClient {
   readonly oracleProgramId: PublicKey
   /** Sends `propose_admin_price`; the price must be whole cents. Needs the `admin` option. */
   proposeAdminPrice(ticker: string, tradingDay: string, price: ChainPrice): Promise<void>
+  /** Every market's collateral counters, vault balance and outcome-mint supplies (R46 audit). */
+  listMarketCollateral(): Promise<MarketCollateral[]>
 }
 
 type Bn = InstanceType<typeof BN>
@@ -112,6 +126,12 @@ interface MarketAccount {
   strikeExpo: number
   closeTs: Bn
   status: object
+  yesMint: PublicKey
+  noMint: PublicKey
+  vault: PublicKey
+  collateral: Bn
+  pairsOutstanding: Bn
+  outcome: object | null
 }
 
 interface TickerDayAccount {
@@ -126,6 +146,21 @@ interface TickerDayAccount {
 interface ConfigAccount {
   usdcMint: PublicKey
   oracleSlots: { kind: object; relaySigner: PublicKey }[]
+}
+
+/** `getMultipleAccounts` takes at most this many addresses per call. */
+const MAX_MULTIPLE_ACCOUNTS = 100
+/** SPL token layouts: a token account's `amount` and a mint's `supply`, both u64 LE. */
+const TOKEN_AMOUNT_OFFSET = 64
+const MINT_SUPPLY_OFFSET = 36
+
+function u64At(data: Uint8Array, offset: number): bigint {
+  return new DataView(data.buffer, data.byteOffset, data.byteLength).getBigUint64(offset, true)
+}
+
+function outcomeOf(outcome: object | null): MarketCollateral['outcome'] {
+  if (outcome === null) return null
+  return isVariant(outcome, 'yes') ? 'yes' : 'no'
 }
 
 function sleep(ms: number): Promise<void> {
@@ -212,6 +247,41 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
     }
   }
 
+  async function marketAccounts(filters: GetProgramAccountsFilter[] = []) {
+    const discriminator = coder.memcmp('market')
+    const accounts = await retry(() =>
+      connection.getProgramAccounts(programId, {
+        commitment: COMMITMENT,
+        filters: [
+          { memcmp: { offset: discriminator.offset ?? 0, bytes: discriminator.bytes ?? '' } },
+          ...filters,
+        ],
+      }),
+    )
+    return accounts.map(({ pubkey, account }) => ({
+      address: pubkey,
+      market: coder.decode<MarketAccount>('market', account.data),
+    }))
+  }
+
+  /** Each address's account data, in order; a missing account is an error. */
+  async function accountData(addresses: PublicKey[]): Promise<Uint8Array[]> {
+    const chunks = Array.from(
+      { length: Math.ceil(addresses.length / MAX_MULTIPLE_ACCOUNTS) },
+      (_, index) =>
+        addresses.slice(index * MAX_MULTIPLE_ACCOUNTS, (index + 1) * MAX_MULTIPLE_ACCOUNTS),
+    )
+    const infos = (
+      await Promise.all(
+        chunks.map((chunk) => retry(() => connection.getMultipleAccountsInfo(chunk, COMMITMENT))),
+      )
+    ).flat()
+    return infos.map((info, index) => {
+      if (!info) throw new Error(`AccountNotInitialized: ${addresses[index]?.toBase58()}`)
+      return info.data
+    })
+  }
+
   function pendingOf(day: TickerDayAccount): PendingAdminPrice | null {
     if (day.pendingAdminAt.isZero()) return null
     return {
@@ -230,11 +300,7 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
     },
 
     async listOpenMarkets(filter: OpenMarketFilter = {}) {
-      const discriminator = coder.memcmp('market')
-      const filters: GetProgramAccountsFilter[] = [
-        { memcmp: { offset: discriminator.offset ?? 0, bytes: discriminator.bytes ?? '' } },
-        bytesFilter(MARKET_STATUS_OFFSET, Uint8Array.of(MARKET_STATUS_OPEN)),
-      ]
+      const filters = [bytesFilter(MARKET_STATUS_OFFSET, Uint8Array.of(MARKET_STATUS_OPEN))]
       if (filter.ticker !== undefined) {
         filters.push(bytesFilter(MARKET_TICKER_OFFSET, tickerBytes(filter.ticker)))
       }
@@ -243,12 +309,8 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
           bytesFilter(MARKET_TRADING_DAY_OFFSET, u32Le(tradingDayNumber(filter.tradingDay))),
         )
       }
-      const accounts = await retry(() =>
-        connection.getProgramAccounts(programId, { commitment: COMMITMENT, filters }),
-      )
-      return accounts.map(({ pubkey, account }) =>
-        toOpenMarket(pubkey, coder.decode<MarketAccount>('market', account.data)),
-      )
+      const accounts = await marketAccounts(filters)
+      return accounts.map(({ address, market }) => toOpenMarket(address, market))
     },
 
     async createStrikeMarket(params) {
@@ -357,6 +419,32 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
           .signers([admin])
           .rpc(),
       )
+    },
+
+    async listMarketCollateral() {
+      const accounts = await marketAccounts()
+      const data = await accountData(
+        accounts.flatMap(({ market }) => [market.vault, market.yesMint, market.noMint]),
+      )
+      return accounts.map(({ address, market }, index): MarketCollateral => {
+        const [vault, yes, no] = data.slice(index * 3, index * 3 + 3) as [
+          Uint8Array,
+          Uint8Array,
+          Uint8Array,
+        ]
+        return {
+          address: address.toBase58(),
+          ticker: tickerFromBytes(market.ticker),
+          tradingDay: tradingDayString(market.tradingDay),
+          status: isVariant(market.status, 'settled') ? 'settled' : 'open',
+          outcome: outcomeOf(market.outcome),
+          collateral: BigInt(market.collateral.toString()),
+          pairsOutstanding: BigInt(market.pairsOutstanding.toString()),
+          vaultBalance: u64At(vault, TOKEN_AMOUNT_OFFSET),
+          yesSupply: u64At(yes, MINT_SUPPLY_OFFSET),
+          noSupply: u64At(no, MINT_SUPPLY_OFFSET),
+        }
+      })
     },
   }
 }

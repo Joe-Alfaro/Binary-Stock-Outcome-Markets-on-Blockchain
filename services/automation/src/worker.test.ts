@@ -5,16 +5,23 @@ import { Keypair } from '@solana/web3.js'
 import { FakeChainClient } from './chain/fake.js'
 import { createHealthState } from './health.js'
 import { FakeClock } from './jobs/fake-clock.js'
-import { createJobLogger, loadChainSettings, parseKeypair, withScanHealth } from './worker.js'
+import {
+  createJobLogger,
+  loadChainSettings,
+  parseKeypair,
+  startWorker,
+  withScanHealth,
+} from './worker.js'
 
 const KEY = 'AUTOMATION_KEYPAIR'
 
 describe('loadChainSettings', () => {
-  it('defaults to the devnet RPC and the built IDL', () => {
+  it('defaults to the devnet RPC and the default meridian IDL', () => {
     const settings = loadChainSettings({ [KEY]: '/keys/automation.json' })
     assert.equal(settings.rpcUrl, 'https://api.devnet.solana.com')
     assert.equal(settings.automationKeypair, '/keys/automation.json')
-    assert.match(settings.idlPath, /target\/idl\/meridian\.json$/)
+    // R65: a deploy has no target/, so the default may be an IDL the service ships.
+    assert.match(settings.idlPath, /meridian\.json$/)
     assert.equal(settings.programId, undefined)
   })
 
@@ -86,5 +93,39 @@ describe('worker plumbing', () => {
     assert.equal(health.snapshot().lastScanAt, null)
     await chain.listOpenMarkets()
     assert.equal(health.snapshot().lastScanAt, '1970-01-01T00:00:01.000Z')
+  })
+})
+
+// R40, R47: the worker runs the relay publisher, which signs with its own relay key. The end-to-end
+// check that it publishes closes and live prices is `tests/worker.test.ts` on a local validator.
+describe('startWorker relay configuration', () => {
+  const key = (keypair = Keypair.generate()) => JSON.stringify([...keypair.secretKey])
+  const env = {
+    [KEY]: key(),
+    // Nothing listens here; the worker must fail on configuration before it sends anything.
+    SOLANA_RPC_URL: 'http://127.0.0.1:1',
+    RELAY_1_SOURCE: 'mock',
+  }
+
+  /** Starts the worker expecting a configuration error; stops it if it starts anyway. */
+  async function expectStartFailure(workerEnv: NodeJS.ProcessEnv, message: RegExp) {
+    let worker: ReturnType<typeof startWorker> | undefined
+    try {
+      worker = startWorker(createHealthState(), workerEnv, { log: () => {}, alertSinks: [] })
+    } catch (error) {
+      assert.match(String(error), message)
+      return
+    }
+    worker.stop()
+    await worker.done
+    assert.fail(`the worker started; expected an error matching ${message}`)
+  }
+
+  it('refuses to start without RELAY_SIGNER_1_KEYPAIR', async () => {
+    await expectStartFailure(env, /RELAY_SIGNER_1_KEYPAIR is not set/)
+  })
+
+  it('rejects a relay key that is not a keypair', async () => {
+    await expectStartFailure({ ...env, RELAY_SIGNER_1_KEYPAIR: '[1,2,3]' }, /keypair/)
   })
 })

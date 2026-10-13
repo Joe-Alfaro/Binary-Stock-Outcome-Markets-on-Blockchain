@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 TSX := npx tsx
 
-.PHONY: install build test check-sizes gates dev deploy-devnet demo
+.PHONY: install build test check-sizes gates dev deploy-devnet demo ship-idls
 
 install:
 	npm install
@@ -43,3 +43,7 @@ deploy-devnet:
 # Full lifecycle in demo mode: create, mint, the four trade paths, settle via the relay, redeem.
 demo:
 	@$(TSX) scripts/demo.ts $(ARGS)
+
+# Copies the built IDLs into the automation service, which ships them for deploys (no target/).
+ship-idls: build
+	@$(TSX) scripts/ship-idls.ts

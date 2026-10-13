@@ -34,6 +34,6 @@ export function createRelayPublisher(options: RelayPublisherOptions): RelayPubli
     runCloses: (tradingDay, closeTs, deadlineTs) =>
       runCloses(context, tradingDay, closeTs, deadlineTs),
     publishLatest: () => liveRelay().publishLatest(),
-    runLive: (untilTs) => liveRelay().runLive(untilTs),
+    runLive: (untilTs, signal) => liveRelay().runLive(untilTs, signal),
   }
 }

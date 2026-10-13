@@ -1,0 +1,2890 @@
+{
+  "address": "9o9a9HpN6Aq4UBeozWshAKBugjtToxWdsVzSMPkVHEMX",
+  "metadata": {
+    "name": "meridian",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Markets, order book and settlement"
+  },
+  "instructions": [
+    {
+      "name": "add_strike",
+      "discriminator": [
+        226,
+        190,
+        94,
+        4,
+        5,
+        106,
+        15,
+        120
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "ticker_day",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  97,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "args.ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "args.trading_day"
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "args.ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "args.trading_day"
+              },
+              {
+                "kind": "arg",
+                "path": "args.strike"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yes_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "no_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  110,
+                  111
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yes_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateMarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "cancel_order",
+      "discriminator": [
+        95,
+        129,
+        237,
+        240,
+        8,
+        49,
+        223,
+        132
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "order_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_strike_market",
+      "discriminator": [
+        21,
+        162,
+        50,
+        119,
+        68,
+        218,
+        221,
+        35
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "ticker_day",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  97,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "args.ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "args.trading_day"
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "args.ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "args.trading_day"
+              },
+              {
+                "kind": "arg",
+                "path": "args.strike"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yes_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "no_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  110,
+                  111
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yes_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateMarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_admin_settle",
+      "discriminator": [
+        126,
+        230,
+        2,
+        126,
+        159,
+        91,
+        21,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "ticker_day",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  97,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "trading_day"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": [
+              "u8",
+              8
+            ]
+          }
+        },
+        {
+          "name": "trading_day",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "initialize_config",
+      "discriminator": [
+        208,
+        127,
+        21,
+        1,
+        194,
+        190,
+        196,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "program",
+          "address": "9o9a9HpN6Aq4UBeozWshAKBugjtToxWdsVzSMPkVHEMX"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitializeConfigArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "merge_pair",
+      "discriminator": [
+        30,
+        61,
+        163,
+        68,
+        40,
+        68,
+        160,
+        222
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "yes_mint",
+          "writable": true
+        },
+        {
+          "name": "no_mint",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "user_usdc",
+          "writable": true
+        },
+        {
+          "name": "user_yes",
+          "writable": true
+        },
+        {
+          "name": "user_no",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "n",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "merge_pair_up_to",
+      "discriminator": [
+        24,
+        95,
+        222,
+        136,
+        113,
+        222,
+        25,
+        154
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "yes_mint",
+          "writable": true
+        },
+        {
+          "name": "no_mint",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "user_usdc",
+          "writable": true
+        },
+        {
+          "name": "user_yes",
+          "writable": true
+        },
+        {
+          "name": "user_no",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "max_n",
+          "type": "u64"
+        },
+        {
+          "name": "keep_yes",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "mint_pair",
+      "discriminator": [
+        19,
+        149,
+        94,
+        110,
+        181,
+        186,
+        33,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "yes_mint",
+          "writable": true
+        },
+        {
+          "name": "no_mint",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "user_usdc",
+          "writable": true
+        },
+        {
+          "name": "user_yes",
+          "writable": true
+        },
+        {
+          "name": "user_no",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "n",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "pause",
+      "discriminator": [
+        211,
+        22,
+        221,
+        251,
+        74,
+        121,
+        193,
+        47
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "ping",
+      "docs": [
+        "Placeholder instruction so the scaffold builds, deploys and has a smoke test."
+      ],
+      "discriminator": [
+        173,
+        0,
+        94,
+        236,
+        73,
+        133,
+        225,
+        153
+      ],
+      "accounts": [],
+      "args": []
+    },
+    {
+      "name": "place_order",
+      "discriminator": [
+        51,
+        194,
+        155,
+        175,
+        109,
+        130,
+        96,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "yes_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_usdc",
+          "writable": true
+        },
+        {
+          "name": "user_yes",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "side",
+          "type": {
+            "defined": {
+              "name": "Side"
+            }
+          }
+        },
+        {
+          "name": "kind",
+          "type": {
+            "defined": {
+              "name": "OrderKind"
+            }
+          }
+        },
+        {
+          "name": "price",
+          "type": "u8"
+        },
+        {
+          "name": "qty",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "propose_admin_price",
+      "discriminator": [
+        9,
+        99,
+        128,
+        14,
+        124,
+        89,
+        59,
+        160
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "ticker_day",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  97,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "trading_day"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": [
+              "u8",
+              8
+            ]
+          }
+        },
+        {
+          "name": "trading_day",
+          "type": "u32"
+        },
+        {
+          "name": "price",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "redeem",
+      "discriminator": [
+        184,
+        12,
+        86,
+        149,
+        70,
+        196,
+        97,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "yes_mint",
+          "writable": true
+        },
+        {
+          "name": "no_mint",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "user_usdc",
+          "writable": true
+        },
+        {
+          "name": "user_yes",
+          "writable": true
+        },
+        {
+          "name": "user_no",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "yes_amount",
+          "type": "u64"
+        },
+        {
+          "name": "no_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_demo_mode",
+      "docs": [
+        "Only in builds with the `devnet` feature, which is on by default; a mainnet build turns",
+        "it off with `--no-default-features` (D21, D52)."
+      ],
+      "discriminator": [
+        190,
+        208,
+        120,
+        39,
+        35,
+        234,
+        145,
+        104
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "enabled",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "settle_funds",
+      "discriminator": [
+        238,
+        64,
+        163,
+        96,
+        75,
+        171,
+        16,
+        33
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "yes_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_yes",
+          "writable": true
+        },
+        {
+          "name": "user_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "settle_market",
+      "discriminator": [
+        193,
+        153,
+        95,
+        216,
+        166,
+        6,
+        144,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "ticker_day",
+          "writable": true
+        },
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "close_record",
+          "docs": [
+            "`[\"close\", slot relay signer, ticker, trading_day (u32 LE)]`. Validated in the handler,",
+            "because it is legitimately uninitialized when the ticker-day is final from an admin price."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "slot",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "unpause",
+      "discriminator": [
+        169,
+        144,
+        4,
+        38,
+        10,
+        141,
+        188,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_config",
+      "discriminator": [
+        29,
+        158,
+        252,
+        191,
+        10,
+        83,
+        219,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "UpdateConfigArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "Market",
+      "discriminator": [
+        219,
+        190,
+        213,
+        55,
+        0,
+        227,
+        198,
+        154
+      ]
+    },
+    {
+      "name": "OrderBook",
+      "discriminator": [
+        55,
+        230,
+        125,
+        218,
+        149,
+        39,
+        65,
+        248
+      ]
+    },
+    {
+      "name": "TickerDay",
+      "discriminator": [
+        140,
+        217,
+        51,
+        148,
+        18,
+        80,
+        48,
+        168
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "AdminPriceMismatch",
+      "discriminator": [
+        225,
+        44,
+        70,
+        199,
+        89,
+        31,
+        2,
+        146
+      ]
+    },
+    {
+      "name": "MarketSettled",
+      "discriminator": [
+        237,
+        212,
+        22,
+        175,
+        201,
+        117,
+        215,
+        99
+      ]
+    },
+    {
+      "name": "OrderFilled",
+      "discriminator": [
+        120,
+        124,
+        109,
+        66,
+        249,
+        116,
+        174,
+        30
+      ]
+    },
+    {
+      "name": "PairMerged",
+      "discriminator": [
+        122,
+        77,
+        149,
+        132,
+        211,
+        248,
+        245,
+        212
+      ]
+    },
+    {
+      "name": "PairMinted",
+      "discriminator": [
+        24,
+        66,
+        202,
+        249,
+        156,
+        196,
+        33,
+        51
+      ]
+    },
+    {
+      "name": "Redeemed",
+      "discriminator": [
+        14,
+        29,
+        183,
+        71,
+        31,
+        165,
+        107,
+        38
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotImplemented",
+      "msg": "Instruction not implemented yet"
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "Signer is not allowed to call this instruction"
+    },
+    {
+      "code": 6002,
+      "name": "Paused",
+      "msg": "The program is paused"
+    },
+    {
+      "code": 6003,
+      "name": "MintNotOpen",
+      "msg": "Minting has not opened for this market yet"
+    },
+    {
+      "code": 6004,
+      "name": "MarketClosed",
+      "msg": "The market is at or past its close"
+    },
+    {
+      "code": 6005,
+      "name": "MarketSettled",
+      "msg": "The market is already settled"
+    },
+    {
+      "code": 6006,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6007,
+      "name": "UnknownTicker",
+      "msg": "Ticker is not in the configured ticker list"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidMarketTimes",
+      "msg": "Market times must satisfy mint_open_ts <= trading_open_ts < close_ts"
+    },
+    {
+      "code": 6009,
+      "name": "CloseTsMismatch",
+      "msg": "close_ts differs from the ticker-day's close_ts"
+    },
+    {
+      "code": 6010,
+      "name": "CollateralInvariant",
+      "msg": "Collateral invariant violated"
+    },
+    {
+      "code": 6011,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6012,
+      "name": "TradingNotOpen",
+      "msg": "Trading has not opened for this market yet"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidPrice",
+      "msg": "Order price must be a whole number of cents from 1 to 99"
+    },
+    {
+      "code": 6014,
+      "name": "PostOnlyWouldCross",
+      "msg": "A post-only order would cross the book"
+    },
+    {
+      "code": 6015,
+      "name": "BookSideFull",
+      "msg": "This side of the book is full"
+    },
+    {
+      "code": 6016,
+      "name": "SeatsFull",
+      "msg": "Every seat in this book is taken"
+    },
+    {
+      "code": 6017,
+      "name": "OrderNotFound",
+      "msg": "No resting order with this ID"
+    },
+    {
+      "code": 6018,
+      "name": "NoSeat",
+      "msg": "The signer has no seat in this book"
+    },
+    {
+      "code": 6019,
+      "name": "SettleTooEarly",
+      "msg": "The market has not reached its close yet"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidOracleAccount",
+      "msg": "Oracle account is not the canonical close record for this slot, ticker and day"
+    },
+    {
+      "code": 6021,
+      "name": "OracleSlotDisabled",
+      "msg": "The oracle slot is disabled"
+    },
+    {
+      "code": 6022,
+      "name": "StalePrice",
+      "msg": "A price update is too far from close_ts"
+    },
+    {
+      "code": 6023,
+      "name": "ConfidenceTooWide",
+      "msg": "A price update's confidence band is too wide"
+    },
+    {
+      "code": 6024,
+      "name": "NonPositivePrice",
+      "msg": "A price must be positive"
+    },
+    {
+      "code": 6025,
+      "name": "OutsideRegularSession",
+      "msg": "A price update is outside the regular session"
+    },
+    {
+      "code": 6026,
+      "name": "NoValidClosePrice",
+      "msg": "The price updates form no valid closing-price shape"
+    },
+    {
+      "code": 6027,
+      "name": "MarketNotSettled",
+      "msg": "The market is not settled yet"
+    },
+    {
+      "code": 6028,
+      "name": "TickerDayFinal",
+      "msg": "The ticker-day already has its final price"
+    },
+    {
+      "code": 6029,
+      "name": "AdminProposeTooEarly",
+      "msg": "Too early to propose an admin price"
+    },
+    {
+      "code": 6030,
+      "name": "AdminFinalizeTooEarly",
+      "msg": "Too early to finalize the admin price"
+    },
+    {
+      "code": 6031,
+      "name": "NoPendingAdminPrice",
+      "msg": "No admin price is pending"
+    },
+    {
+      "code": 6032,
+      "name": "NonStandardSchedule",
+      "msg": "Market times must follow the regular schedule unless demo mode is on"
+    }
+  ],
+  "types": [
+    {
+      "name": "AdminPriceMismatch",
+      "docs": [
+        "An oracle price settled a ticker-day that had a different admin price pending."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ticker_day",
+            "type": "pubkey"
+          },
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "trading_day",
+            "type": "u32"
+          },
+          {
+            "name": "oracle_price",
+            "type": "i64"
+          },
+          {
+            "name": "admin_price",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "automation_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "tickers",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    8
+                  ]
+                },
+                7
+              ]
+            }
+          },
+          {
+            "name": "oracle_slots",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "OracleSlot"
+                  }
+                },
+                2
+              ]
+            }
+          },
+          {
+            "name": "max_staleness_secs",
+            "type": "u32"
+          },
+          {
+            "name": "max_conf_bps",
+            "type": "u16"
+          },
+          {
+            "name": "admin_propose_delay_secs",
+            "type": "u32"
+          },
+          {
+            "name": "admin_finalize_delay_secs",
+            "type": "u32"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "demo_mode",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreateMarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "trading_day",
+            "docs": [
+              "YYYYMMDD."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "strike",
+            "type": "i64"
+          },
+          {
+            "name": "strike_expo",
+            "type": "i32"
+          },
+          {
+            "name": "close_ts",
+            "type": "i64"
+          },
+          {
+            "name": "mint_open_ts",
+            "type": "i64"
+          },
+          {
+            "name": "trading_open_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeConfigArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "automation_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "tickers",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    8
+                  ]
+                },
+                7
+              ]
+            }
+          },
+          {
+            "name": "oracle_slots",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "OracleSlot"
+                  }
+                },
+                2
+              ]
+            }
+          },
+          {
+            "name": "max_staleness_secs",
+            "type": "u32"
+          },
+          {
+            "name": "max_conf_bps",
+            "type": "u16"
+          },
+          {
+            "name": "admin_propose_delay_secs",
+            "type": "u32"
+          },
+          {
+            "name": "admin_finalize_delay_secs",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Market",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "trading_day",
+            "docs": [
+              "YYYYMMDD."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "strike",
+            "docs": [
+              "`strike × 10^strike_expo` is the strike price."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "strike_expo",
+            "type": "i32"
+          },
+          {
+            "name": "close_ts",
+            "type": "i64"
+          },
+          {
+            "name": "mint_open_ts",
+            "type": "i64"
+          },
+          {
+            "name": "trading_open_ts",
+            "type": "i64"
+          },
+          {
+            "name": "ticker_day",
+            "type": "pubkey"
+          },
+          {
+            "name": "yes_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "no_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "book",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral",
+            "docs": [
+              "USDC base units backing outstanding pairs. Never read from the vault balance."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pairs_outstanding",
+            "docs": [
+              "Whole Yes/No pairs outstanding (each backed by `UNIT` USDC base units)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "MarketStatus"
+              }
+            }
+          },
+          {
+            "name": "outcome",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "Outcome"
+                }
+              }
+            }
+          },
+          {
+            "name": "settle_price",
+            "type": "i64"
+          },
+          {
+            "name": "settle_source",
+            "type": {
+              "defined": {
+                "name": "SettleSource"
+              }
+            }
+          },
+          {
+            "name": "demo",
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "docs": [
+              "Zeroed space for the settlement package (pending admin price and time, and the like), so",
+              "its fields fit in markets created before that upgrade."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "trading_day",
+            "type": "u32"
+          },
+          {
+            "name": "strike",
+            "type": "i64"
+          },
+          {
+            "name": "outcome",
+            "type": {
+              "defined": {
+                "name": "Outcome"
+              }
+            }
+          },
+          {
+            "name": "settle_price",
+            "type": "i64"
+          },
+          {
+            "name": "settle_expo",
+            "type": "i32"
+          },
+          {
+            "name": "settle_source",
+            "type": {
+              "defined": {
+                "name": "SettleSource"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Settled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenOrders",
+      "docs": [
+        "A trader's seat inside the book. A seat with `owner == Pubkey::default()` is free. Locked",
+        "amounts are derived from the owner's resting orders."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "free_yes",
+            "docs": [
+              "Yes base units the owner can withdraw with `settle_funds`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "free_usdc",
+            "docs": [
+              "USDC base units the owner can withdraw with `settle_funds`."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleKind",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Disabled"
+          },
+          {
+            "name": "MeridianRelay"
+          },
+          {
+            "name": "Pyth"
+          },
+          {
+            "name": "ChainlinkDataStreams"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleSlot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "OracleKind"
+              }
+            }
+          },
+          {
+            "name": "relay_signer",
+            "docs": [
+              "`MeridianRelay`: the relay signer for this slot."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "feed_ids",
+            "docs": [
+              "`Pyth` feed IDs or `ChainlinkDataStreams` stream IDs, in `Config.tickers` order."
+            ],
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                7
+              ]
+            }
+          },
+          {
+            "name": "verifier_program",
+            "docs": [
+              "`ChainlinkDataStreams`: the verifier program."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "min_verification_level",
+            "docs": [
+              "`Pyth`: the minimum verification level."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Order",
+      "docs": [
+        "A resting order. A slot with `qty == 0` is empty."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "u64"
+          },
+          {
+            "name": "qty",
+            "docs": [
+              "Remaining whole tokens."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "price",
+            "docs": [
+              "Cents."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "seat",
+            "docs": [
+              "Index into `OrderBook::seats`."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "_padding",
+            "type": {
+              "array": [
+                "u8",
+                6
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderBook",
+      "docs": [
+        "Order book for one market. The order-book fields follow the header; `market` stays first.",
+        "Order and seat types live in `state/orderbook.rs`."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "yes_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "next_seq",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_padding",
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
+          },
+          {
+            "name": "bids",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Order"
+                  }
+                },
+                32
+              ]
+            }
+          },
+          {
+            "name": "asks",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Order"
+                  }
+                },
+                32
+              ]
+            }
+          },
+          {
+            "name": "seats",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "OpenOrders"
+                  }
+                },
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderFilled",
+      "docs": [
+        "One per fill, emitted with `emit_cpi!`. Names both sides because the maker's fill happens in",
+        "the taker's transaction."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "taker",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker_order_id",
+            "type": "u64"
+          },
+          {
+            "name": "taker_side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "docs": [
+              "Cents: the maker's price."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "qty",
+            "docs": [
+              "Whole tokens."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderKind",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Limit"
+          },
+          {
+            "name": "Market"
+          },
+          {
+            "name": "PostOnly"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Outcome",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Yes"
+          },
+          {
+            "name": "No"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairMerged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "n",
+            "docs": [
+              "Whole pairs."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairMinted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "n",
+            "docs": [
+              "Whole pairs."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Redeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "yes_amount",
+            "type": "u64"
+          },
+          {
+            "name": "no_amount",
+            "type": "u64"
+          },
+          {
+            "name": "payout",
+            "docs": [
+              "USDC base units paid."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SettleSource",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "OracleSlot0"
+          },
+          {
+            "name": "OracleSlot1"
+          },
+          {
+            "name": "Admin"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Side",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Bid"
+          },
+          {
+            "name": "Ask"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TickerDay",
+      "docs": [
+        "One settlement price for every strike of a ticker and trading day."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ticker",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "trading_day",
+            "docs": [
+              "YYYYMMDD."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "close_ts",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "TickerDayStatus"
+              }
+            }
+          },
+          {
+            "name": "settle_price",
+            "type": "i64"
+          },
+          {
+            "name": "settle_expo",
+            "type": "i32"
+          },
+          {
+            "name": "settle_source",
+            "type": {
+              "defined": {
+                "name": "SettleSource"
+              }
+            }
+          },
+          {
+            "name": "pending_admin_price",
+            "type": "i64"
+          },
+          {
+            "name": "pending_admin_at",
+            "docs": [
+              "0 when no admin price is pending."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "settle_numerator",
+            "docs": [
+              "The exact final price, `settle_numerator / settle_denominator × 10^settle_expo`. An",
+              "interpolated close is a fraction, and every strike compares against it rather than the",
+              "rounded `settle_price`. The denominator is 0 until the ticker-day is final."
+            ],
+            "type": "i128"
+          },
+          {
+            "name": "settle_denominator",
+            "type": "i128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TickerDayStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Final"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpdateConfigArgs",
+      "docs": [
+        "`None` leaves a field unchanged."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "automation_authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "oracle_slots",
+            "type": {
+              "option": {
+                "array": [
+                  {
+                    "defined": {
+                      "name": "OracleSlot"
+                    }
+                  },
+                  2
+                ]
+              }
+            }
+          },
+          {
+            "name": "max_staleness_secs",
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "max_conf_bps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "admin_propose_delay_secs",
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "admin_finalize_delay_secs",
+            "type": {
+              "option": "u32"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

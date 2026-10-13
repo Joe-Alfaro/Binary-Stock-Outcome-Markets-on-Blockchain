@@ -9,7 +9,6 @@ const server = createHealthServer(health).listen(port, () => {
   console.log(`health check on :${port}/healthz`)
 })
 console.log(`automation worker starting on ${config.cluster} (demo mode: ${config.demoMode})`)
-// TODO: start the relay publishers and price endpoint, recording into `health`.
 const worker = startWorker(health)
 
 function shutdown() {
