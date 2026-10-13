@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- stubs until the implementation lands */
-import type { YesBook } from './types.js'
+import type { BookLevel, YesBook } from './types.js'
 
 /** The No view of a Yes book. Both sides are sorted best-first. */
 export interface NoBook {
@@ -15,14 +14,40 @@ export interface ExecutableQuotes {
   sellNo: number | null
 }
 
-export function noView(_book: YesBook): NoBook {
-  throw new Error('not implemented')
+function complement(levels: readonly BookLevel[]): BookLevel[] {
+  return levels.map(({ priceCents, qty }) => ({ priceCents: impliedNoPrice(priceCents), qty }))
 }
 
-export function executableQuotes(_book: YesBook): ExecutableQuotes {
-  throw new Error('not implemented')
+function bestBid(levels: readonly BookLevel[]): number | null {
+  if (levels.length === 0) return null
+  return Math.max(...levels.map((level) => level.priceCents))
 }
 
-export function impliedNoPrice(_yesPriceCents: number): number {
-  throw new Error('not implemented')
+function bestAsk(levels: readonly BookLevel[]): number | null {
+  if (levels.length === 0) return null
+  return Math.min(...levels.map((level) => level.priceCents))
+}
+
+/** No asks are `100 − Yes bids` and No bids are `100 − Yes asks`, with the same quantities. */
+export function noView(book: YesBook): NoBook {
+  return {
+    bids: complement(book.asks).sort((a, b) => b.priceCents - a.priceCents),
+    asks: complement(book.bids).sort((a, b) => a.priceCents - b.priceCents),
+  }
+}
+
+/** Buy No fills against the best Yes bid and Sell No against the best Yes ask. */
+export function executableQuotes(book: YesBook): ExecutableQuotes {
+  const yesBid = bestBid(book.bids)
+  const yesAsk = bestAsk(book.asks)
+  return {
+    buyYes: yesAsk,
+    sellYes: yesBid,
+    buyNo: yesBid === null ? null : impliedNoPrice(yesBid),
+    sellNo: yesAsk === null ? null : impliedNoPrice(yesAsk),
+  }
+}
+
+export function impliedNoPrice(yesPriceCents: number): number {
+  return 100 - yesPriceCents
 }
