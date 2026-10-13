@@ -29,11 +29,15 @@ gates: check-sizes build
 	cargo test --workspace
 	anchor test --skip-build --validator legacy
 
+# Local validator (LOCAL_VALIDATOR_RPC_PORT), deploy, bootstrap with a mock USDC mint, sample
+# markets, then the worker and the web app. Pass ARGS=--dry-run to print the plan.
 dev:
-	@$(TSX) scripts/todo.ts 'make dev (local validator, deploy, bootstrap, sample markets, worker, web)'
+	@$(TSX) scripts/dev.ts $(ARGS)
 
+# Builds and deploys both programs to devnet, records their IDs and bootstraps config.
 deploy-devnet:
-	@$(TSX) scripts/todo.ts 'make deploy-devnet'
+	@$(TSX) scripts/deploy-devnet.ts $(ARGS)
 
+# Full lifecycle in demo mode: create, mint, the four trade paths, settle via the relay, redeem.
 demo:
-	@$(TSX) scripts/todo.ts 'make demo (full lifecycle on devnet)'
+	@$(TSX) scripts/demo.ts $(ARGS)
