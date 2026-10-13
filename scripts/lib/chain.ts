@@ -57,6 +57,8 @@ interface DemoMarket {
   market: PublicKey
   yesMint: PublicKey
   noMint: PublicKey
+  vault: PublicKey
+  book: PublicKey
 }
 
 function loadIdl(name: string): Idl {
@@ -285,7 +287,7 @@ function createChain(env: NodeJS.ProcessEnv) {
       pda(meridian.programId, [encoder.encode('config')]),
     )
     if (!info) throw new Error('Config is not initialized; run the bootstrap first')
-    const config = meridian.coder.accounts.decode('Config', info.data) as { usdcMint: PublicKey }
+    const config = meridian.coder.accounts.decode('config', info.data) as { usdcMint: PublicKey }
     return config.usdcMint
   }
 
@@ -464,6 +466,7 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
         market: info.market,
         yesMint: info.yesMint,
         noMint: info.noMint,
+        vault: info.vault,
         userUsdc,
         userYes,
         userNo,
@@ -480,7 +483,13 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
     const { userUsdc, userYes } = await traderAccounts(info)
     return chain
       .method('meridian', 'placeOrder', { [side]: {} }, { limit: {} }, price, new BN(quantity))
-      .accountsPartial({ owner: trader.publicKey, market: info.market, userUsdc, userYes })
+      .accountsPartial({
+        owner: trader.publicKey,
+        market: info.market,
+        book: info.book,
+        userUsdc,
+        userYes,
+      })
       .instruction()
   }
 
@@ -544,6 +553,8 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
         market,
         yesMint: pda(meridian.programId, [encoder.encode('yes'), market.toBytes()]),
         noMint: pda(meridian.programId, [encoder.encode('no'), market.toBytes()]),
+        vault: pda(meridian.programId, [encoder.encode('vault'), market.toBytes()]),
+        book: pda(meridian.programId, [encoder.encode('book'), market.toBytes()]),
       })
       return { market: market.toBase58(), signature }
     },
@@ -665,6 +676,7 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
           market: info.market,
           yesMint: info.yesMint,
           noMint: info.noMint,
+          vault: info.vault,
           userUsdc,
           userYes,
           userNo,
