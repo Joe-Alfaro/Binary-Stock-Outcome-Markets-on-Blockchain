@@ -1,6 +1,11 @@
 use anchor_lang::prelude::*;
 
+use super::settle::{
+    closing_price_of, finalize_from_oracle, oracle_slot, require_settleable,
+    require_third_party_settler, settle_strike,
+};
 use crate::errors::MeridianError;
+use crate::price_adapter::data_streams::{self, Verifier};
 use crate::state::*;
 
 /// `settle_market` for oracle kinds whose inputs are signed reports passed as instruction data
@@ -26,10 +31,41 @@ pub struct SettleMarketWithReports<'info> {
     pub report_config: UncheckedAccount<'info>,
 }
 
+/// Same flow as `settle_market`: the first strike of a ticker-day settles from the verified
+/// reports, every later strike copies the ticker-day's price. Only report kinds are read here.
 pub fn handle_settle_market_with_reports(
-    _ctx: Context<SettleMarketWithReports>,
-    _slot: u8,
-    _reports: Vec<Vec<u8>>,
+    ctx: Context<SettleMarketWithReports>,
+    slot: u8,
+    reports: Vec<Vec<u8>>,
 ) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+    let now = Clock::get()?.unix_timestamp;
+    require_settleable(&ctx.accounts.market, now)?;
+    let (oracle_slot, source) = oracle_slot(&ctx.accounts.config, slot)?;
+    require!(
+        oracle_slot.kind == OracleKind::ChainlinkDataStreams,
+        MeridianError::InvalidOracleAccount
+    );
+
+    if ctx.accounts.ticker_day.status == TickerDayStatus::Open {
+        let accounts = &ctx.accounts;
+        require_third_party_settler(&accounts.config, &accounts.caller)?;
+        let verifier = Verifier {
+            program: &accounts.verifier_program,
+            verifier_account: &accounts.verifier_account,
+            access_controller: &accounts.access_controller,
+            user: &accounts.caller,
+            report_config: &accounts.report_config,
+        };
+        let updates = data_streams::updates(
+            &verifier,
+            &reports,
+            oracle_slot,
+            &accounts.config,
+            &accounts.market,
+        )?;
+        let price = closing_price_of(&updates, &accounts.config, &accounts.market, now)?;
+        finalize_from_oracle(&mut ctx.accounts.ticker_day, &price, source)?;
+    }
+
+    settle_strike(&ctx.accounts.ticker_day, &mut ctx.accounts.market)
 }
