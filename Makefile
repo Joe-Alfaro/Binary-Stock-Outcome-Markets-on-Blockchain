@@ -3,6 +3,11 @@ TSX := npx tsx
 
 .PHONY: install build test check-sizes gates dev deploy-devnet demo ship-idls e2e
 
+# npm test checks the shipped IDLs against the build under test (R65), whose program addresses
+# follow this checkout's keypairs (`anchor keys sync`). So the copies are regenerated from that
+# build first, and the committed devnet copies are written back afterwards, pass or fail.
+NPM_TEST := $(TSX) scripts/ship-idls.ts && { npm test; status=$$?; $(TSX) scripts/ship-idls.ts --devnet; exit $$status; }
+
 install:
 	npm install
 
@@ -11,7 +16,7 @@ build:
 
 # Runs every suite: workspace unit tests, Rust unit tests and Anchor integration tests.
 test: build
-	npm test
+	$(NPM_TEST)
 	cargo test --workspace
 	./scripts/check-validator-ports.sh
 	anchor test --skip-build --validator legacy
@@ -26,7 +31,7 @@ gates: check-sizes build
 	npm run typecheck
 	cargo fmt --all -- --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	npm test
+	$(NPM_TEST)
 	cargo test --workspace
 	./scripts/check-validator-ports.sh
 	anchor test --skip-build --validator legacy
@@ -44,9 +49,10 @@ deploy-devnet:
 demo:
 	@$(TSX) scripts/demo.ts $(ARGS)
 
-# Copies the built IDLs into the automation service, which ships them for deploys (no target/).
+# Writes the IDLs the automation service ships for deploys (no target/), with the devnet program
+# IDs throughout, so the committed copies are the same on every machine. Commit the result.
 ship-idls: build
-	@$(TSX) scripts/ship-idls.ts
+	@$(TSX) scripts/ship-idls.ts --devnet
 
 # Playwright specs (R22, R56) on a private stack: validator on E2E_RPC_PORT (default 8975),
 # programs at genesis, bootstrap with a mock USDC mint and demo mode, one demo market, then

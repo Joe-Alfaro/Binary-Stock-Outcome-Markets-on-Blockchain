@@ -104,6 +104,15 @@ practical.
 - Program keypairs live in `target/deploy/` and are never committed. On a fresh checkout run
   `anchor keys sync` to generate them and update the program IDs, or copy in the shared devnet
   keypairs out of band.
+- The automation service ships both IDLs in `services/automation/idl/`, because a deploy has no
+  `target/`. The committed copies carry the devnet program IDs from `Anchor.toml`
+  `[programs.devnet]` throughout. After changing a program's interface, run `make ship-idls` and
+  commit the result; it maps the build's IDs to the devnet IDs, so it comes out the same on every
+  machine.
+- The IDL instructions embed program addresses, which follow each checkout's own keypairs after
+  `anchor keys sync`. So `make gates` and `make test` regenerate the shipped copies from the build
+  under test before `npm test` (the R65 drift check compares them with `target/idl`), then write
+  the committed devnet copies back. Never commit copies generated from a local or CI build.
 
 ## Local-only documents
 
