@@ -85,6 +85,11 @@ pub struct TickerDay {
     /// 0 when no admin price is pending.
     pub pending_admin_at: i64,
     pub bump: u8,
+    /// The exact final price, `settle_numerator / settle_denominator × 10^settle_expo`. An
+    /// interpolated close is a fraction, and every strike compares against it rather than the
+    /// rounded `settle_price`. The denominator is 0 until the ticker-day is final.
+    pub settle_numerator: i128,
+    pub settle_denominator: i128,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]

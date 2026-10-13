@@ -159,6 +159,8 @@ fn create(ctx: Context<CreateMarket>, args: CreateMarketArgs) -> Result<()> {
             pending_admin_price: 0,
             pending_admin_at: 0,
             bump: ctx.bumps.ticker_day,
+            settle_numerator: 0,
+            settle_denominator: 0,
         });
     } else {
         require!(

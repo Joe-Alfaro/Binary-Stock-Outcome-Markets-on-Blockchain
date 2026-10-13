@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Settlement (`feat/settlement`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 65 red LiteSVM tests and the instruction stubs for
+  `settle_market`, `propose_admin_price`, `finalize_admin_settle` and `redeem`. The
+  implementation worker wrote the handlers: close-record validation (owner, type, canonical PDA
+  for the slot signer, ticker and day, `close_ts`), the closing-price rule and exact outcome
+  through `meridian-math`, one final price per ticker and day stored as an exact rational on the
+  `TickerDay`, the delayed admin fallback, the `AdminPriceMismatch` event, and redeem paid from
+  the collateral counter. Tests were not changed by the implementation.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — Settlement math (`feat/math`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), as a TDD pair: one session wrote the red tests and
