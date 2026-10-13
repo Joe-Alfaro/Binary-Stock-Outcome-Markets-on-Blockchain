@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — README and doc checks (`feat/docs`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the checks, another wrote the docs.
+- **What the AI did:** the test worker wrote `node:test` doc checks for the README sections, the
+  dependency table (computed from every manifest), regulatory-claim phrases, forbidden names read
+  from a file outside the repo, and this log. The implementation worker wrote `README.md` from the
+  code on every feature branch, merged or not: setup, devnet funding, deploy, the demo, the chain
+  and oracle rationale, the settlement schedule, finality, the `merge_pair` deviation, a
+  dependency table that also covers unmerged branches, current status and limitations. It didn't
+  change the checks.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Price providers (`feat/providers`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
