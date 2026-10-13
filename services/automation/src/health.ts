@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http'
+import type { IntradayService } from './intraday/index.js'
 
 export interface HealthSnapshot {
   status: 'ok'
@@ -36,8 +37,15 @@ export function createHealthState(): HealthState {
   }
 }
 
+export interface HealthServerOptions {
+  /** Serves `GET /prices/intraday/<ticker>`, the Markets chart's series (R66). */
+  intraday?: IntradayService
+}
+
 /** HTTP server for the Railway health check: `GET /healthz` returns the snapshot as JSON. */
-export function createHealthServer(state: HealthState): Server {
+export function createHealthServer(state: HealthState, options: HealthServerOptions = {}): Server {
+  // R66: the intraday route is not served yet.
+  void options.intraday
   return createServer((request, response) => {
     const path = new URL(request.url ?? '/', 'http://localhost').pathname
     if (request.method === 'GET' && path === '/healthz') {

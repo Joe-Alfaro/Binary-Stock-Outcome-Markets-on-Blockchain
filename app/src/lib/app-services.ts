@@ -11,6 +11,7 @@ import {
 import { createSolanaChainClient } from './chain'
 import type { TradeBuilders } from './chain/builders'
 import type { SolanaChainConfig } from './chain/solana'
+import { createIntradayClient } from './intraday'
 import type { Services } from './services'
 import { createWalletAdapters } from './wallet/adapters'
 import { AdapterWalletPort } from './wallet/port'
@@ -71,6 +72,7 @@ export function getAppServices(): AppServices {
   instance = {
     chain: createSolanaChainClient(appChainConfig()),
     wallet: new AdapterWalletPort(createWalletAdapters()),
+    intraday: createIntradayClient(process.env.NEXT_PUBLIC_PRICE_API_URL || undefined),
     now: () => Math.floor(Date.now() / 1000),
   }
   return instance

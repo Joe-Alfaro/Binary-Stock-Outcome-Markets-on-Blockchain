@@ -1,5 +1,5 @@
 import { relayConfidence } from './confidence.js'
-import { PriceSourceError } from './errors.js'
+import { PriceSourceError, notImplemented } from './errors.js'
 import type { PriceSourceErrorCode } from './errors.js'
 import { isRecord, malformed } from './parse.js'
 import {
@@ -10,6 +10,7 @@ import {
   newYorkMidnight,
 } from './time.js'
 import type {
+  IntradayPriceProvider,
   LivePriceProvider,
   NormalizedPrice,
   PreviousClose,
@@ -303,7 +304,7 @@ async function readResponse(host: string, response: Response): Promise<FetchResu
 /** Relay source backed by the keyless Yahoo Finance chart API. */
 export function createYahooSource(
   options: YahooSourceOptions = {},
-): PriceProvider & LivePriceProvider {
+): PriceProvider & LivePriceProvider & IntradayPriceProvider {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const now = options.now ?? (() => Math.floor(Date.now() / 1000))
@@ -388,6 +389,10 @@ export function createYahooSource(
       // The daily interval keeps the response small; the meta block carries the live quote.
       const body = await getChart(ticker, { interval: '1d', range: '1d' })
       return latestPrice(parseChart(body, ticker), ticker, now())
+    },
+
+    async intraday(ticker, fromTs, toTs) {
+      return notImplemented(ticker, fromTs, toTs)
     },
   }
 }

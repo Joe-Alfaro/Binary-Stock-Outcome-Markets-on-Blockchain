@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
-import { PriceSourceError } from './errors.js'
+import { PriceSourceError, notImplemented } from './errors.js'
 import { REGULAR_CLOSE_SECS, newYorkMidnight } from './time.js'
-import type { LivePriceProvider, PriceProvider } from './types.js'
+import type { IntradayPriceProvider, LivePriceProvider, PriceProvider } from './types.js'
 import { closeInputs, completedDailyCloses, parseChart, toNormalized } from './yahoo.js'
 import type { YahooChart } from './yahoo.js'
 
@@ -41,7 +41,7 @@ export interface MockSourceOptions {
  */
 export function createMockSource(
   options: MockSourceOptions = {},
-): PriceProvider & LivePriceProvider {
+): PriceProvider & LivePriceProvider & IntradayPriceProvider {
   const now = options.now ?? (() => Math.floor(Date.now() / 1000))
   return {
     name: 'mock',
@@ -77,6 +77,10 @@ export function createMockSource(
     async latest(ticker) {
       const { chart } = recording(ticker, '1m')
       return toNormalized(ticker, chart.regularMarketPrice, 0, now(), false)
+    },
+
+    async intraday(ticker, fromTs, toTs) {
+      return notImplemented(ticker, fromTs, toTs)
     },
   }
 }
