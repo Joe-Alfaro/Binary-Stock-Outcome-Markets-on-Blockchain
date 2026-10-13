@@ -6,8 +6,11 @@ import { describe, it } from 'node:test'
 import { findEnvReads, looksSecret, parseEnvFile } from './env-scan.js'
 import { REPO_ROOT } from './test-support.js'
 
-/** Set by the platform or the shell, never by the user's .env. */
-const PLATFORM_VARS = new Set(['NODE_ENV', 'PORT', 'CI', 'HOME', 'PATH'])
+/**
+ * Set by the platform or the shell, never by the user's .env. PORT is not one of them: the
+ * worker's health server reads it, so .env.example must document it (R62).
+ */
+const PLATFORM_VARS = new Set(['NODE_ENV', 'CI', 'HOME', 'PATH'])
 
 const SOURCE_FILE = /\.(ts|tsx|js|mjs|cjs)$/
 const SKIPPED = /(\.test\.tsx?$|test-support\.ts$|(^|\/)fixtures\/)/
@@ -44,6 +47,22 @@ describe('findEnvReads (R62)', () => {
       'RELAY_1_SOURCE',
       'SOLANA_CLUSTER',
     ])
+  })
+
+  it('finds PORT in every read form, including destructuring an injected env', () => {
+    const forms = [
+      'const port = process.env.PORT',
+      'const port = env.PORT',
+      'const port = env?.PORT',
+      "const port = process.env['PORT']",
+      'const port = env?.["PORT"]',
+      'const { PORT } = process.env',
+      'const { PORT } = env',
+      "const { PORT: port = '8080' } = env",
+      'function listen({ PORT }: NodeJS.ProcessEnv = process.env) {}',
+    ]
+    const missed = forms.filter((source) => !findEnvReads(source).includes('PORT'))
+    assert.deepEqual(missed, [])
   })
 
   it('ignores lowercase properties and unrelated objects', () => {
@@ -105,6 +124,12 @@ describe('.env.example (R62)', () => {
         .map((name) => `${name} (${path})`),
     )
     assert.deepEqual(missing, [])
+  })
+
+  it('lists PORT, which the worker health server reads', () => {
+    const health = readFileSync(join(REPO_ROOT, 'services/automation/src/health.ts'), 'utf8')
+    assert.ok(findEnvReads(health).includes('PORT'), 'the scan finds the PORT read in health.ts')
+    assert.ok(readExample().has('PORT'), '.env.example lists PORT')
   })
 
   it('contains no secret-looking values', () => {

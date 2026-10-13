@@ -6,8 +6,13 @@ const BRACKET_READ = new RegExp(
   `\\b(?:process\\.)?env\\??\\.?\\[\\s*['"\`](${NAME})['"\`]\\s*\\]`,
   'g',
 )
-/** Destructuring from `process.env`, including renamed bindings. */
-const DESTRUCTURE = /\{([^{}]*)\}\s*=\s*process\.env\b/g
+/**
+ * Destructuring from `process.env` or an injected `env`, including renamed and defaulted bindings
+ * and a destructured parameter, optionally typed, that defaults to either. `= env.x` destructures
+ * something else and doesn't match.
+ */
+const DESTRUCTURE =
+  /\{([^{}]*)\}\s*(?::[^={}]*)?=\s*\b(?:process\.)?env\b(?!\s*\??\.\s*[\w[]|\s*\[)/g
 
 const SECRET_NAME = /SECRET|TOKEN|KEYPAIR|PRIVATE|PASSWORD|PASSPHRASE|API_KEY|MNEMONIC|SEED/
 const BASE58_KEY = /^[1-9A-HJ-NP-Za-km-z]{64,}$/

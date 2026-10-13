@@ -135,6 +135,9 @@ function fakeDemo(genesisHash = DEVNET_GENESIS_HASH, broken?: Broken) {
       }
       return send('redeem')
     },
+    async chainNow() {
+      return Math.floor(clock.now / 1000)
+    },
     async confirm(signature, commitment) {
       commitments.push(commitment)
       clock.now += CONFIRM_MS
@@ -235,6 +238,48 @@ describe('runDemo (R61, R55, R38)', () => {
     const settleSig = result.transactions.find((tx) => tx.step === 'settle')?.signature
     assert.ok(settleSig)
     assert.ok((fake.confirmedAt.get(settleSig) ?? 0) >= result.closeTs * 1000)
+  })
+
+  // The program checks close_ts against the validator's Clock sysvar, which runs behind the wall
+  // clock on a loaded host: settling at wall-clock close_ts failed with SettleTooEarly (6019).
+  it('waits for the validator clock, not the wall clock, to reach close_ts before settling', async () => {
+    const lagMs = 30_000
+    const fake = fakeDemo()
+    const { client, now } = fake.options
+    const validatorNow = () => Math.floor((now() - lagMs) / 1000)
+    let closeTs = Number.POSITIVE_INFINITY
+    const settledAt: number[] = []
+    const lagging: DemoClient = {
+      ...client,
+      async createDemoMarket(params) {
+        closeTs = params.closeTs
+        return client.createDemoMarket(params)
+      },
+      async chainNow() {
+        return validatorNow()
+      },
+      async settle(market) {
+        if (validatorNow() < closeTs) {
+          throw new Error(
+            `custom program error: 0x1783 (SettleTooEarly, 6019): validator clock ${validatorNow()} < close_ts ${closeTs}`,
+          )
+        }
+        settledAt.push(validatorNow())
+        return client.settle(market)
+      },
+    }
+
+    const result = await runDemo({
+      env: { SOLANA_CLUSTER: 'devnet' },
+      ...fake.options,
+      client: lagging,
+    })
+
+    assert.equal(settledAt.length, 1)
+    assert.ok(
+      (settledAt[0] ?? 0) >= result.closeTs,
+      'settled once the validator clock passed close_ts',
+    )
   })
 
   it('prints every signature with its explorer link and confirmation latency', async () => {
