@@ -20,6 +20,7 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
+  SYSVAR_CLOCK_PUBKEY,
   Transaction,
   TransactionInstruction,
   type VersionedTransaction,
@@ -786,7 +787,11 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
     },
 
     async chainNow() {
-      throw new Error('not implemented')
+      const clock = await chain.connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY, 'confirmed')
+      if (!clock) throw new Error('The Clock sysvar account was not found')
+      // Clock layout: slot u64, epoch_start_timestamp i64, epoch u64, leader_schedule_epoch u64,
+      // unix_timestamp i64.
+      return Number(clock.data.readBigInt64LE(32))
     },
   }
 }

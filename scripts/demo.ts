@@ -106,6 +106,8 @@ const PAIRS = 10
 const UNIT = 1_000_000n
 /** Solana finality is sub-second at `confirmed`; the demo doesn't wait for `finalized`. */
 const COMMITMENT: Commitment = 'confirmed'
+/** Wall-clock seconds past close_ts to keep waiting for a lagging validator clock. */
+const CHAIN_CLOCK_GRACE_SECS = 300
 
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -120,9 +122,9 @@ function move(target: WalletBalances, delta: Partial<WalletBalances>) {
 /**
  * A client that sends nothing and returns made-up signatures, for `--dry-run`. It keeps a ledger
  * of both wallets, where each path fills against the counterparty's quote and the market settles
- * No.
+ * No. Its validator clock is `now`, in milliseconds.
  */
-export function createDryRunClient(): DemoClient {
+export function createDryRunClient(now: () => number = Date.now): DemoClient {
   let counter = 0
   const signature = (step: string) => {
     counter += 1
@@ -197,7 +199,7 @@ export function createDryRunClient(): DemoClient {
     },
     async confirm() {},
     async chainNow() {
-      throw new Error('not implemented')
+      return Math.floor(now() / 1000)
     },
   }
 }
@@ -230,6 +232,31 @@ function assertPathFilled(path: TradePath, before: WalletBalances, after: Wallet
   }
   if (usdc <= 0n || usdc >= moved) {
     throw new Error(`${path} filled at a price outside (0, $1) (${formatDelta(delta)})`)
+  }
+}
+
+/**
+ * Sleeps until the validator's clock reaches `closeTs`. The program checks close_ts against the
+ * Clock sysvar, which can run behind the wall clock on a loaded host, so waiting on the wall clock
+ * alone gets SettleTooEarly. Gives up once the validator is CHAIN_CLOCK_GRACE_SECS of wall time
+ * past close_ts and still behind it.
+ */
+async function waitForChainClock(
+  client: DemoClient,
+  closeTs: number,
+  { now, sleep, log }: Required<Pick<DemoOptions, 'now' | 'sleep' | 'log'>>,
+) {
+  for (;;) {
+    const chainNow = await client.chainNow()
+    const behindSecs = closeTs - chainNow
+    if (behindSecs <= 0) return
+    if (now() / 1000 > closeTs + CHAIN_CLOCK_GRACE_SECS) {
+      throw new Error(
+        `The validator clock (${chainNow}) is still behind close_ts (${closeTs}) ${CHAIN_CLOCK_GRACE_SECS} s after it`,
+      )
+    }
+    log(`Waiting ${behindSecs} s for the validator clock to reach close_ts`)
+    await sleep(behindSecs * 1000)
   }
 }
 
@@ -286,11 +313,7 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
     }
   }
 
-  const waitMs = closeTs * 1000 - now()
-  if (waitMs > 0) {
-    log(`Waiting ${Math.ceil(waitMs / 1000)} s for close_ts`)
-    await sleep(waitMs)
-  }
+  await waitForChainClock(client, closeTs, { now, sleep, log })
   await confirm('publish', await client.publishRelayClose(market), market)
   const { confirmedAt: settledAt } = await confirm('settle', await client.settle(market), market)
   const settlementDelaySecs = (settledAt - closeTs * 1000) / 1000
@@ -335,7 +358,8 @@ async function main() {
   loadDotEnv()
   guardCluster(process.env)
   if (process.argv.includes('--dry-run')) {
-    await runDemo({ env: process.env, client: createDryRunClient(), ...virtualClock() })
+    const clock = virtualClock()
+    await runDemo({ env: process.env, client: createDryRunClient(clock.now), ...clock })
     return
   }
   const { createDemoClient } = await import('./lib/chain.js')
