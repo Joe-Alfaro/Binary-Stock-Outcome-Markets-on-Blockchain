@@ -28,12 +28,14 @@ import {
 } from './layout'
 import { TICKERS } from './types'
 import type {
+  CancelOrderRequest,
   ChainClient,
   Commitment,
   Confirmation,
   ContractSummary,
   LatestPrice,
   MarketOwner,
+  OpenOrder,
   SignedTx,
   Ticker,
   TradeIntent,
@@ -504,6 +506,27 @@ class SolanaChainClient implements ChainClient {
     const build = this.builders().buildCloseOutAndRedeem
     if (!build) {
       throw new ChainError('Unknown', 'Close out and redeem is not available in this build yet.')
+    }
+    const { ctx, height } = await this.closeOutContext(request)
+    return build(ctx).transactions.map((tx) => this.wrap(tx, height))
+  }
+
+  async getOpenOrders(owner: string, market: string): Promise<OpenOrder[]> {
+    const b = await this.balances(new PublicKey(owner), new PublicKey(market))
+    return b.restingOrders.map((o) => ({ ...o, orderId: o.orderId.toString() }))
+  }
+
+  async buildCancelOrder(request: CancelOrderRequest): Promise<UnsignedTx> {
+    const build = this.builders().buildCancelOrder
+    if (!build) throw new ChainError('Unknown', 'Cancel order is not available in this build yet.')
+    const { ctx, height } = await this.closeOutContext(request)
+    return this.wrap(build(ctx, BigInt(request.orderId)), height)
+  }
+
+  async buildCloseOutPosition(request: MarketOwner): Promise<UnsignedTx[]> {
+    const build = this.builders().buildCloseOutPosition
+    if (!build) {
+      throw new ChainError('Unknown', 'Close out position is not available in this build yet.')
     }
     const { ctx, height } = await this.closeOutContext(request)
     return build(ctx).transactions.map((tx) => this.wrap(tx, height))

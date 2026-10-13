@@ -2,9 +2,11 @@ import type { TransactionInstruction, VersionedTransaction } from '@solana/web3.
 import {
   TOKEN_PROGRAM,
   ata,
+  cancelOrder,
   compile,
   createAccounts,
   meridian,
+  pack,
   readonly,
   settleFunds,
   u64,
@@ -12,8 +14,6 @@ import {
 } from './instructions.js'
 import type { CloseOutContext, CloseOutPlan, RedeemContext } from './types.js'
 
-/** The packet limit a serialized transaction must fit. */
-const MAX_TX_BYTES = 1232
 const UNIT = 1_000_000n
 
 export type RedeemErrorCode = 'NOT_SETTLED' | 'NOTHING_TO_REDEEM'
@@ -83,49 +83,6 @@ function assertSettled(ctx: RedeemContext): void {
 
 function createAllAccounts(ctx: RedeemContext): TransactionInstruction[] {
   return createAccounts(ctx, ['usdcMint', 'yesMint', 'noMint'])
-}
-
-/** Greedy in-order packing: each transaction takes steps until the next one wouldn't fit. */
-function pack(ctx: RedeemContext, steps: TransactionInstruction[]): VersionedTransaction[] {
-  const transactions: VersionedTransaction[] = []
-  let current: TransactionInstruction[] = []
-  let built: VersionedTransaction | null = null
-  for (const step of steps) {
-    const candidate = fitting(ctx, [...current, step])
-    if (candidate) {
-      current.push(step)
-      built = candidate
-      continue
-    }
-    if (!built) throw new RangeError('one close-out step does not fit in a transaction')
-    transactions.push(built)
-    current = [step]
-    built = fitting(ctx, current)
-    if (!built) throw new RangeError('one close-out step does not fit in a transaction')
-  }
-  if (built) transactions.push(built)
-  return transactions
-}
-
-/** The compiled transaction, or null when it exceeds the size limit. */
-function fitting(ctx: RedeemContext, steps: TransactionInstruction[]): VersionedTransaction | null {
-  try {
-    const tx = compile(ctx, steps)
-    return tx.serialize().length <= MAX_TX_BYTES ? tx : null
-  } catch {
-    // Too many accounts or bytes for the message encoder.
-    return null
-  }
-}
-
-function cancelOrder(ctx: RedeemContext, orderId: bigint): TransactionInstruction {
-  const m = ctx.market
-  return meridian(
-    ctx,
-    'cancel_order',
-    [readonly(ctx.owner, true), readonly(m.market), writable(m.book)],
-    [u64(orderId)],
-  )
 }
 
 function redeem(ctx: RedeemContext, yes: bigint, no: bigint): TransactionInstruction {

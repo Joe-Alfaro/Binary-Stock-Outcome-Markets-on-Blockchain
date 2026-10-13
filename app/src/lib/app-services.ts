@@ -1,7 +1,9 @@
 import {
   buildBuyNoTransaction,
   buildBuyYesTransaction,
+  buildCancelOrder,
   buildCloseOutAndRedeem,
+  buildCloseOutPosition,
   buildRedeem,
   buildSellNoTransaction,
   buildSellYesTransaction,
@@ -21,7 +23,7 @@ export interface AppServices extends Services {
   wallet: AdapterWalletPort
 }
 
-/** The SDK trade-path and redeem builders. */
+/** The SDK trade-path, unwind and redeem builders. */
 export const sdkTradeBuilders: TradeBuilders = {
   buildBuyYesTransaction,
   buildSellYesTransaction,
@@ -29,6 +31,8 @@ export const sdkTradeBuilders: TradeBuilders = {
   buildSellNoTransaction,
   buildRedeem,
   buildCloseOutAndRedeem,
+  buildCancelOrder,
+  buildCloseOutPosition,
 }
 
 let instance: AppServices | null = null

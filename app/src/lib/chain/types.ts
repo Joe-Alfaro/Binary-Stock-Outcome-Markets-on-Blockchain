@@ -65,6 +65,20 @@ export interface MarketOwner {
   owner: string
 }
 
+/** One of the wallet's resting orders, in Yes-book terms. A resting Buy No limit is an `Ask`. */
+export interface OpenOrder {
+  /** The on-chain order id, as a decimal string. */
+  orderId: string
+  side: 'Bid' | 'Ask'
+  priceCents: number
+  /** Remaining whole tokens. */
+  qty: number
+}
+
+export interface CancelOrderRequest extends MarketOwner {
+  orderId: string
+}
+
 /** A built transaction waiting for the wallet. Opaque to the UI. */
 export interface UnsignedTx {
   readonly raw: unknown
@@ -108,6 +122,15 @@ export interface ChainClient {
    * the wallet has more orders than one transaction fits.
    */
   buildCloseOutAndRedeem(request: MarketOwner): Promise<UnsignedTx[]>
+  /** The wallet's resting orders on one market's book (R28 [G]). */
+  getOpenOrders(owner: string, market: string): Promise<OpenOrder[]>
+  /** Cancels one resting order and settles funds back to the wallet: one transaction (R28 [G]). */
+  buildCancelOrder(request: CancelOrderRequest): Promise<UnsignedTx>
+  /**
+   * Before settlement: cancels the wallet's resting orders, settles funds and merges its Yes+No
+   * pairs back to USDC. Several transactions in order only when the orders don't fit one (R28 [G]).
+   */
+  buildCloseOutPosition(request: MarketOwner): Promise<UnsignedTx[]>
   sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation>
 }
 

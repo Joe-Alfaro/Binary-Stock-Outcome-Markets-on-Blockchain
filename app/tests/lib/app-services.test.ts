@@ -55,6 +55,13 @@ describe('app services', () => {
     assert.equal(builders.buildRedeem, sdk.buildRedeem)
     assert.equal(builders.buildCloseOutAndRedeem, sdk.buildCloseOutAndRedeem)
   })
+
+  it('give the chain client the SDK cancel and pre-settlement close-out builders (R28 [G])', () => {
+    const builders = appChainConfig().builders
+    assert.ok(builders, 'no builders configured')
+    assert.equal(builders.buildCancelOrder, sdk.buildCancelOrder)
+    assert.equal(builders.buildCloseOutPosition, sdk.buildCloseOutPosition)
+  })
 })
 
 describe('built program IDs', () => {
