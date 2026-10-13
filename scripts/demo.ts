@@ -61,6 +61,11 @@ export interface DemoClient extends GenesisRpc {
   settle(market: string): Promise<string>
   redeem(market: string): Promise<string>
   confirm(signature: string, commitment: Commitment): Promise<void>
+  /**
+   * The validator's clock in Unix seconds (the Clock sysvar's `unix_timestamp`). The program checks
+   * `close_ts` against it, and it can run behind the wall clock.
+   */
+  chainNow(): Promise<number>
 }
 
 export interface DemoOptions {
@@ -191,6 +196,9 @@ export function createDryRunClient(): DemoClient {
       return signature('redeem')
     },
     async confirm() {},
+    async chainNow() {
+      throw new Error('not implemented')
+    },
   }
 }
 

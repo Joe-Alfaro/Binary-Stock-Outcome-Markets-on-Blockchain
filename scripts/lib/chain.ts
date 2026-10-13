@@ -784,5 +784,9 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
         .instruction()
       return chain.send([ix], [trader])
     },
+
+    async chainNow() {
+      throw new Error('not implemented')
+    },
   }
 }
