@@ -67,7 +67,7 @@ CI config (`.gitlab-ci.yml`) must keep:
   on, so a new push cancels the old pipeline.
 - No `artifacts:` and no remote or distributed cache. Caching stays local to the runner host.
 - `retry: 0`, `timeout: 30m` and as few jobs as possible (currently one).
-- Small logs: quiet flags (`npm ci --no-audit --no-fund --loglevel=error`, quiet cargo), no
+- Small logs: quiet flags (`npm ci --no-audit --no-fund --loglevel=error`, no cargo progress bars), no
   verbose test reporters, never print files or environment variables.
 
 Runner (`~/.gitlab-runner/config.toml` on the maintainer's Mac):

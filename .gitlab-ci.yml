@@ -9,6 +9,7 @@
 #   `git clean`). node_modules/ is reinstalled only when package-lock.json changes.
 # - npm's download cache (~/.npm) and the cargo registry (~/.cargo) live in the runner user's
 #   home directory.
+# - CARGO_TERM_QUIET is not set: Anchor's IDL build already passes --quiet and cargo rejects both.
 # - Program keypairs are not committed. `anchor keys sync` points the program IDs at the runner's
 #   keypairs in target/deploy/ (generated on first run, then kept with target/).
 
@@ -21,7 +22,6 @@ variables:
   GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e target/
   GIT_DEPTH: '1'
   HUSKY: '0'
-  CARGO_TERM_QUIET: 'true'
   CARGO_TERM_PROGRESS_WHEN: never
   npm_config_loglevel: error
   npm_config_audit: 'false'
