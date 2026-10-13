@@ -1,0 +1,23 @@
+[toolchain]
+anchor_version = "1.2.1"
+solana_version = "4.3.0"
+package_manager = "npm"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+meridian = "9o9a9HpN6Aq4UBeozWshAKBugjtToxWdsVzSMPkVHEMX"
+meridian_oracle = "3HDbiFX8iSf7zXfaYmFRPNnKsjUiLvF55rHperUvjjVY"
+
+[programs.devnet]
+meridian = "9o9a9HpN6Aq4UBeozWshAKBugjtToxWdsVzSMPkVHEMX"
+meridian_oracle = "3HDbiFX8iSf7zXfaYmFRPNnKsjUiLvF55rHperUvjjVY"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "npx mocha --node-option import=tsx --timeout 1000000 'tests/**/*.test.ts'"

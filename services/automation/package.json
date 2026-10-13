@@ -1,0 +1,15 @@
+{
+  "name": "@meridian/automation",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Worker: scheduler, jobs, relay publishers, alerts, admin CLI",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "tsx": "^4.23.15"
+  }
+}
