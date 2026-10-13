@@ -35,7 +35,9 @@ import type {
   OpenMarketFilter,
   OracleSlot,
   PendingAdminPrice,
+  PythUpdateAccounts,
 } from './types.js'
+import type { OracleSlotSettings } from '../config.js'
 
 // The package is CommonJS and Node can't detect all of its named exports.
 const { AnchorProvider, BN, Program, Wallet, utils } = anchor
@@ -105,6 +107,17 @@ export interface AnchorChainClientOptions {
   oracleProgramId?: PublicKey
   /** Bounded retries for transport failures. Defaults to 3 tries, 500 ms then 1 s apart. */
   retry?: Partial<RetryPolicy>
+  /**
+   * How each slot settles, from `ORACLE_SLOT_<n>` (`loadOracleSlotSettings`). Defaults to slot 1
+   * on the relay and slot 2 disabled.
+   */
+  slotSettings?: OracleSlotSettings
+  /** Finds or posts the `PriceUpdateV2` accounts a Pyth slot settles from. */
+  pythUpdates?: PythUpdateAccounts
+  /** For the Pyth and Data Streams HTTP providers. Defaults to the global `fetch`. */
+  fetch?: typeof fetch
+  /** Milliseconds, for request signing. Defaults to `Date.now`. */
+  now?: () => number
 }
 
 /** The Anchor client also lets the admin propose a fallback price (R36). */

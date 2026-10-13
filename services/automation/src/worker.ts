@@ -13,6 +13,7 @@ import {
   loadOracleProgramId,
   oracleIdlPath,
   type ChainClient,
+  type PythUpdateAccounts,
 } from './chain/index.js'
 import { loadConfig } from './config.js'
 import type { HealthState } from './health.js'
@@ -142,6 +143,8 @@ export interface WorkerDeps {
   log?: LineWriter
   /** Alert sinks. Defaults to `sinksFromEnv(env)`. */
   alertSinks?: AlertSink[]
+  /** Finds or posts the `PriceUpdateV2` accounts a Pyth slot settles from. */
+  pythUpdates?: PythUpdateAccounts
 }
 
 export interface Worker {

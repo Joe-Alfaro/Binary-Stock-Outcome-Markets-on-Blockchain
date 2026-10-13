@@ -6,6 +6,7 @@ import type {
   OracleSlot,
   OracleSlots,
 } from '../chain/index.js'
+import type { OracleSlotSettings } from '../config.js'
 import type { Clock } from './clock.js'
 import type { JobLogger } from './logger.js'
 import { formatPrice, samePrice } from './price.js'
@@ -17,6 +18,11 @@ export interface SettlementJobDeps {
   log: JobLogger
   /** Stops the job; the returned promise resolves once it has stopped. */
   signal: AbortSignal
+  /**
+   * `ORACLE_SLOT_<n>`: a slot this worker has disabled is never polled, whatever `Config` holds.
+   * Omitted, every slot `Config` enables is polled.
+   */
+  slotSettings?: OracleSlotSettings
 }
 
 const SECOND_MS = 1_000

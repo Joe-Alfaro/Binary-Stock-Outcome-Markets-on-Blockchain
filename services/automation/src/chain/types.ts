@@ -1,3 +1,6 @@
+import type { PythCloseUpdate } from '@meridian/price-providers'
+import type { PublicKey } from '@solana/web3.js'
+
 /** Price as stored on-chain: `price × 10^expo`, as Pyth and the program use. */
 export interface ChainPrice {
   price: bigint
@@ -92,4 +95,13 @@ export interface ChainClient {
   finalizeAdminSettle(ticker: string, tradingDay: string): Promise<void>
   /** The pending admin price of a ticker and day, or null when none is pending. */
   readPendingAdminPrice(ticker: string, tradingDay: string): Promise<PendingAdminPrice | null>
+}
+
+/**
+ * Finds or posts the Pyth receiver `PriceUpdateV2` accounts that hold a Hermes close update, for
+ * `settle_market` on a Pyth slot.
+ */
+export interface PythUpdateAccounts {
+  /** The update accounts, first one first: it goes in `close_record`, the rest are remaining accounts. */
+  accountsFor(update: PythCloseUpdate, market: OpenMarket): Promise<PublicKey[]>
 }

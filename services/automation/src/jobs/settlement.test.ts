@@ -4,6 +4,7 @@ import { describe, it } from 'node:test'
 import { tradingDayTimes } from '../calendar/index.js'
 import { FakeChainClient } from '../chain/fake.js'
 import type { OracleKind, OracleSlot } from '../chain/index.js'
+import type { OracleSlotSettings } from '../config.js'
 import { FakeClock } from './fake-clock.js'
 import { runSettlementJob } from './settlement.js'
 import { MINUTE, SECOND, observe, recordingAlerter, recordingLogger, usd } from './test-support.js'
@@ -22,6 +23,7 @@ function at(minutes: number, seconds = 0): number {
 
 interface Setup {
   startMs?: number
+  slotSettings?: OracleSlotSettings
   slot2?: OracleKind
   tickers?: string[]
   strikes?: bigint[]
@@ -39,15 +41,24 @@ function setup(options: Setup = {}) {
   )
   const alerter = recordingAlerter(clock)
   const log = recordingLogger(clock)
-  return { clock, chain, alerter, log }
+  return { clock, chain, alerter, log, slotSettings: options.slotSettings }
 }
 
 type Env = ReturnType<typeof setup>
 
 /** Starts a job instance; `stop` aborts it and requires it to wind down. */
-function start({ clock, chain, alerter, log }: Env) {
+function start({ clock, chain, alerter, log, slotSettings }: Env) {
   const controller = new AbortController()
-  const job = observe(runSettlementJob({ chain, alerter, clock, log, signal: controller.signal }))
+  const job = observe(
+    runSettlementJob({
+      chain,
+      alerter,
+      clock,
+      log,
+      signal: controller.signal,
+      ...(slotSettings ? { slotSettings } : {}),
+    }),
+  )
   return {
     job,
     async stop(drainMs = 0) {
@@ -174,6 +185,49 @@ describe('settlement escalation schedule (R37, D14)', () => {
     const job = start(env)
     await env.clock.advanceTo(at(70))
     assert.deepEqual(attemptTimes(env, 'AAPL', 2), [])
+    await job.stop()
+  })
+
+  it('never polls slot 2 while ORACLE_SLOT_2 is disabled, even when Config enables it (R32)', async () => {
+    const env = setup({
+      slot2: 'MeridianRelay',
+      slotSettings: { slot1: { kind: 'relay' }, slot2: { kind: 'disabled' } },
+    })
+    const job = start(env)
+    await env.clock.advanceTo(at(6))
+    // Only slot 2 has a price, and this worker doesn't settle from slot 2.
+    env.chain.publishClose(2, 'AAPL', DAY, usd('230.00'))
+    await env.clock.advanceTo(at(30))
+
+    assert.deepEqual(attemptTimes(env, 'AAPL', 2), [])
+    assert.ok(attemptTimes(env, 'AAPL', 1).length > 0, 'slot 1 is still polled')
+    await job.stop()
+  })
+
+  it('polls slot 2 once ORACLE_SLOT_2 names a kind (R32)', async () => {
+    const env = setup({
+      slot2: 'MeridianRelay',
+      slotSettings: { slot1: { kind: 'relay' }, slot2: { kind: 'relay' } },
+    })
+    const job = start(env)
+    await env.clock.advanceTo(at(6))
+    env.chain.publishClose(2, 'AAPL', DAY, usd('230.00'))
+    await env.clock.advanceTo(at(7))
+
+    assertAllSettled(env, at(7), ['AAPL'])
+    await job.stop()
+  })
+
+  it('never polls slot 1 while ORACLE_SLOT_1 is disabled (R32)', async () => {
+    const env = setup({
+      slot2: 'MeridianRelay',
+      slotSettings: { slot1: { kind: 'disabled' }, slot2: { kind: 'relay' } },
+    })
+    const job = start(env)
+    await env.clock.advanceTo(at(30))
+
+    assert.deepEqual(attemptTimes(env, 'AAPL', 1), [])
+    assert.ok(attemptTimes(env, 'AAPL', 2).length > 0, 'slot 2 is still polled')
     await job.stop()
   })
 
