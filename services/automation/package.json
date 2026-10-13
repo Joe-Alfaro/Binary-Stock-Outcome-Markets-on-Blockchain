@@ -13,6 +13,7 @@
     "@anchor-lang/core": "^1.2.1",
     "@meridian/price-providers": "^0.0.0",
     "@meridian/sdk": "^0.0.0",
+    "@pythnetwork/pyth-solana-receiver": "^0.16.0",
     "@solana/web3.js": "^1.99.0",
     "tsx": "^4.23.15"
   }

@@ -13,13 +13,26 @@ export const PYTH_FEED_IDS: Readonly<Record<string, string>> = {
   TSLA: '16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1',
 }
 
-const TICKER_BY_FEED_ID = new Map(Object.entries(PYTH_FEED_IDS).map(([ticker, id]) => [id, ticker]))
+/** A feed ID as 64 lowercase hex digits, without `0x`. */
+export function bareFeedId(id: string): string {
+  return id.toLowerCase().replace(/^0x/, '')
+}
 
-function normalizeEntry(entry: unknown, closeTs: number): NormalizedPrice | null {
+function tickersByFeedId(feedIds: Readonly<Record<string, string>>): Map<string, string> {
+  return new Map(Object.entries(feedIds).map(([ticker, id]) => [bareFeedId(id), ticker]))
+}
+
+const TICKER_BY_FEED_ID = tickersByFeedId(PYTH_FEED_IDS)
+
+function normalizeEntry(
+  entry: unknown,
+  closeTs: number,
+  tickers: Map<string, string>,
+): NormalizedPrice | null {
   if (!isRecord(entry) || typeof entry.id !== 'string' || !isRecord(entry.price)) {
     throw malformed('Hermes update is missing its id or price')
   }
-  const ticker = TICKER_BY_FEED_ID.get(entry.id.toLowerCase().replace(/^0x/, ''))
+  const ticker = tickers.get(bareFeedId(entry.id))
   if (ticker === undefined) return null
   const { price, conf, expo, publish_time: publishTime } = entry.price
   if (typeof expo !== 'number' || !Number.isInteger(expo)) {
@@ -40,16 +53,17 @@ function normalizeEntry(entry: unknown, closeTs: number): NormalizedPrice | null
 /**
  * Normalizes a Hermes `GET /v2/updates/price/{publish_time}` response. Session is regular when
  * the publish time falls between 09:30 ET and `closeTs` on the close's day. Pyth never labels an
- * official close.
+ * official close. Feeds map to tickers through `context.feedIds`, by default `PYTH_FEED_IDS`.
  */
 export function normalizePythUpdates(
   response: unknown,
-  context: { closeTs: number },
+  context: { closeTs: number; feedIds?: Readonly<Record<string, string>> },
 ): NormalizedPrice[] {
+  const tickers = context.feedIds ? tickersByFeedId(context.feedIds) : TICKER_BY_FEED_ID
   if (!isRecord(response) || !Array.isArray(response.parsed)) {
     throw malformed('Hermes response has no parsed updates')
   }
   return response.parsed
-    .map((entry) => normalizeEntry(entry, context.closeTs))
+    .map((entry) => normalizeEntry(entry, context.closeTs, tickers))
     .filter((update): update is NormalizedPrice => update !== null)
 }

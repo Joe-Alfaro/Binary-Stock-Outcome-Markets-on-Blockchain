@@ -13,8 +13,10 @@ import {
   loadOracleProgramId,
   oracleIdlPath,
   type ChainClient,
+  type PythUpdateAccounts,
 } from './chain/index.js'
-import { loadConfig } from './config.js'
+import { createPythReceiverPoster } from './chain/pyth-receiver.js'
+import { loadConfig, loadOracleSlotSettings, type OracleSlotSettings } from './config.js'
 import type { HealthState } from './health.js'
 import { runInvariantAudits } from './invariants.js'
 import { TICKERS, runSettlementJob, systemClock, type Clock, type JobLogger } from './jobs/index.js'
@@ -142,6 +144,8 @@ export interface WorkerDeps {
   log?: LineWriter
   /** Alert sinks. Defaults to `sinksFromEnv(env)`. */
   alertSinks?: AlertSink[]
+  /** Finds or posts the `PriceUpdateV2` accounts a Pyth slot settles from. */
+  pythUpdates?: PythUpdateAccounts
 }
 
 export interface Worker {
@@ -165,6 +169,32 @@ function relaySigner(env: NodeJS.ProcessEnv): Keypair {
   }
 }
 
+/** The Pyth update locator: injected, else the receiver poster when a slot is Pyth. */
+function pythUpdatesFor(
+  slotSettings: OracleSlotSettings,
+  deps: WorkerDeps,
+  poster: (receiverProgram: string) => PythUpdateAccounts,
+): { pythUpdates?: PythUpdateAccounts } {
+  if (deps.pythUpdates) return { pythUpdates: deps.pythUpdates }
+  const pyth = [slotSettings.slot1, slotSettings.slot2].find((setting) => setting.kind === 'pyth')
+  return pyth?.kind === 'pyth' ? { pythUpdates: poster(pyth.receiverProgram) } : {}
+}
+
+/** CHAINLINK_ACCESS_CONTROLLER_ID overrides the verifier's default access controller. */
+function chainlinkAccessController(env: NodeJS.ProcessEnv): {
+  chainlinkAccessController?: PublicKey
+} {
+  const value = env.CHAINLINK_ACCESS_CONTROLLER_ID?.trim()
+  if (!value) return {}
+  try {
+    return { chainlinkAccessController: new PublicKey(value) }
+  } catch (error) {
+    throw new Error('CHAINLINK_ACCESS_CONTROLLER_ID is not a base58 account address', {
+      cause: error,
+    })
+  }
+}
+
 /**
  * Starts the morning job scheduler, the settlement loop, the slot-1 relay (close records after
  * `close_ts` and live prices) and the invariant audit against the cluster in `env`. The jobs sign
@@ -176,6 +206,7 @@ export function startWorker(
   deps: WorkerDeps = {},
 ): Worker {
   const settings = loadChainSettings(env)
+  const slotSettings = loadOracleSlotSettings(env)
   const signer = relaySigner(env)
   const idl: Idl = loadMeridianIdl(settings.idlPath)
   const oracleIdl = loadOracleIdl(oracleIdlPath(settings.idlPath))
@@ -183,11 +214,17 @@ export function startWorker(
     ? new PublicKey(settings.oracleProgramId)
     : loadOracleProgramId(oracleIdlPath(settings.idlPath))
   const connection = new Connection(settings.rpcUrl, 'confirmed')
+  const authority = parseKeypair(settings.automationKeypair)
   const chain = createAnchorChainClient({
     connection,
-    authority: parseKeypair(settings.automationKeypair),
+    authority,
     idl: settings.programId ? { ...idl, address: settings.programId } : idl,
     oracleProgramId,
+    slotSettings,
+    ...pythUpdatesFor(slotSettings, deps, (receiverProgram) =>
+      createPythReceiverPoster({ connection, authority, receiverProgram }),
+    ),
+    ...chainlinkAccessController(env),
   })
   const clock = deps.clock ?? systemClock
   const write = deps.log ?? console.log
@@ -219,7 +256,7 @@ export function startWorker(
   })
   const done = Promise.all([
     runMorningScheduler({ ...shared, provider: source, signal }),
-    runSettlementJob({ ...shared, signal }),
+    runSettlementJob({ ...shared, slotSettings, signal }),
     runCloseLoop({ ...shared, publisher, signal }),
     runLiveLoop({ publisher, signal }),
     runInvariantAudits({ chain, alerter, log, clock, signal }),

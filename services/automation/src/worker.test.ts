@@ -129,3 +129,40 @@ describe('startWorker relay configuration', () => {
     await expectStartFailure({ ...env, RELAY_SIGNER_1_KEYPAIR: '[1,2,3]' }, /keypair/)
   })
 })
+
+// R32: the worker reads ORACLE_SLOT_1 and ORACLE_SLOT_2, so a slot switches by env vars alone.
+describe('startWorker oracle slot configuration (R32)', () => {
+  const key = (keypair = Keypair.generate()) => JSON.stringify([...keypair.secretKey])
+  const env = {
+    [KEY]: key(),
+    RELAY_SIGNER_1_KEYPAIR: key(),
+    // Nothing listens here; the worker must fail on configuration before it sends anything.
+    SOLANA_RPC_URL: 'http://127.0.0.1:1',
+    RELAY_1_SOURCE: 'mock',
+  }
+
+  async function expectStartFailure(workerEnv: NodeJS.ProcessEnv, message: RegExp) {
+    let worker: ReturnType<typeof startWorker> | undefined
+    try {
+      worker = startWorker(createHealthState(), workerEnv, { log: () => {}, alertSinks: [] })
+    } catch (error) {
+      assert.match(String(error), message)
+      return
+    }
+    worker.stop()
+    await worker.done
+    assert.fail(`the worker started; expected an error matching ${message}`)
+  }
+
+  it('refuses an unknown ORACLE_SLOT_1 kind', async () => {
+    await expectStartFailure({ ...env, ORACLE_SLOT_1: 'switchboard' }, /ORACLE_SLOT_1/)
+  })
+
+  it('refuses ORACLE_SLOT_1=pyth without the Pyth settings, naming them', async () => {
+    await expectStartFailure({ ...env, ORACLE_SLOT_1: 'pyth' }, /PYTH_/)
+  })
+
+  it('refuses ORACLE_SLOT_2=chainlink without the Data Streams settings, naming them', async () => {
+    await expectStartFailure({ ...env, ORACLE_SLOT_2: 'chainlink' }, /CHAINLINK_/)
+  })
+})

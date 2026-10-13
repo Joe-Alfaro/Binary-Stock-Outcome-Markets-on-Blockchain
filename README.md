@@ -137,8 +137,9 @@ make demo ARGS=--dry-run   # the same steps against a built-in fake chain
 `make demo` runs one full market lifecycle in a few minutes instead of waiting for a real 4:00 PM
 close:
 
-1. Creates an AAPL market whose close is 90 seconds away, with the strike one dollar over a
-   recorded real close, so the replayed close settles No.
+1. Creates an AAPL market whose close is 90 seconds away. The relay replays the recorded AAPL close
+   of 2026-10-12, $340.97, re-stamped to the demo close, and the strike is one dollar over it
+   ($341.97), so the replayed close settles No.
 2. Funds two fresh wallets, a trader and a counterparty, and the counterparty mints 10 Yes + No
    pairs.
 3. Runs the four trade paths. Before each one the counterparty quotes it, then the trader takes the
@@ -150,7 +151,10 @@ close:
 
 It prints every transaction's signature, explorer link and confirmation time, and the settlement
 delay measured from the close. The demo refuses any cluster other than localnet or devnet. Demo
-markets are flagged on-chain, and the relay logs the replayed price as replayed.
+markets are flagged on-chain, and the relay logs the replayed price as replayed. The 2026-10-12
+close was transcribed from one live chart API response (`origin: recorded-transcribed` in
+`packages/price-providers/fixtures/provenance.json`); the worker in demo mode replays the same close
+for AAPL and the hand-written fixtures for MSFT.
 
 Known gaps: the demo has not been run end to end on devnet. `tests/demo.test.ts` runs it on a local
 validator and checks every path's fill from the confirmed transactions.
@@ -198,19 +202,39 @@ that in the MVP. What limits it: every published price and close record is publi
 rewritten, only regular-session prices near the close are accepted, the relay signer is a separate
 key, and the admin fallback and alerts cover a missing price.
 
-**Switching a slot to Pyth or Chainlink Data Streams.** The design makes this a configuration
-change: point a slot at Pyth or Chainlink with `update_config`, set `ORACLE_SLOT_1` (or
-`ORACLE_SLOT_2` to keep the relay running in slot 1) plus the provider's credentials
-(`PYTH_ACCESS_TOKEN`, or `CHAINLINK_DATA_STEAMS_USERNAME` and `CHAINLINK_HMAC_SECRET`), and restart
-the worker. Do it outside market hours. [ARCHITECTURE.md §5.6](ARCHITECTURE.md#56-switching-a-slot-to-pyth-or-chainlink)
-lists the steps, feed IDs and stream schema. What exists today: the off-chain Pyth and Chainlink
-normalizers in `packages/price-providers`, tested against sample payloads, and the on-chain
-adapters. `settle_market` reads a Pyth `PriceUpdateV2` account, and `settle_market_with_reports`
-verifies Data Streams reports through the verifier program; both share one closing-price, finalize
-and outcome path with the relay. On a third-party slot the first settle needs the automation
-authority or the admin. What doesn't yet: the worker only settles through the relay, and the admin
-CLI for `update_config` isn't built. So switching today needs that code as well as a paid or
-provisioned account.
+**Switching a slot to Pyth or Chainlink Data Streams.** It takes `update_config` plus worker env
+vars, with no code change. The worker reads `ORACLE_SLOT_1` and `ORACLE_SLOT_2` at start and refuses
+to start, naming the variable, when a kind is unknown or a setting it needs is missing or malformed.
+It settles each slot by its kind: a relay slot through `settle_market` with the relay `CloseRecord`;
+a Pyth slot by reading the Hermes update at `close_ts`, posting it through the Pyth receiver as a
+`PriceUpdateV2` account and passing that account to `settle_market`; a Data Streams slot by fetching
+the signed report at `close_ts` and sending its `fullReport` to `settle_market_with_reports`. A slot
+set to `disabled` in the env is never polled, whatever `Config` says. Steps, outside market hours so
+no ticker-day is half-settled under the old slot:
+
+1. Get the provider account: a Pyth plan entitled to US equities (an access token), or Data Streams
+   credentials (user ID and HMAC secret) with the US equity streams assigned.
+2. As the admin, call `update_config` with the new `oracle_slots` (there's no admin CLI yet, so use
+   the Anchor client as `tests/worker_pyth_slot.test.ts` does). For Pyth: `kind: { pyth: {} }`,
+   `feedIds` in `Config.tickers` order, `verifierProgram` = the receiver program, and
+   `minVerificationLevel: 0` (full Wormhole verification). For Data Streams:
+   `kind: { chainlinkDataStreams: {} }`, the stream IDs as `feedIds`, and `verifierProgram` = the
+   verifier program. Leave every other argument `null`.
+3. Set the worker env (see `.env.example`). For Pyth: `ORACLE_SLOT_1=pyth`,
+   `PYTH_RECEIVER_PROGRAM_ID`, `PYTH_FEED_IDS` (`AAPL=<64 hex>,MSFT=<64 hex>,…`) and
+   `PYTH_ACCESS_TOKEN`; `PYTH_HERMES_URL` is optional. For Data Streams: `ORACLE_SLOT_1=chainlink`,
+   `CHAINLINK_VERIFIER_PROGRAM_ID`, `CHAINLINK_STREAM_IDS`, `CHAINLINK_DATA_STREAMS_USERNAME` and
+   `CHAINLINK_HMAC_SECRET`; `CHAINLINK_DATA_STREAMS_URL` and `CHAINLINK_ACCESS_CONTROLLER_ID` are
+   optional. To keep the relay in slot 1, use slot 2 and `ORACLE_SLOT_2` instead.
+4. Restart the `automation` service. It fails fast if step 3 is incomplete.
+5. Check that the next close settles with `settle_source` equal to the switched slot.
+
+Rolling back is the same steps with `kind: { meridianRelay: {} }` and the relay signer, and
+`ORACLE_SLOT_1=relay`. On a third-party slot the first settle needs the automation authority or the
+admin, which is the worker's signer. [ARCHITECTURE.md §5.6](ARCHITECTURE.md#56-switching-a-slot-to-pyth-or-chainlink)
+lists the feed IDs and stream schema. Known gaps: posted `PriceUpdateV2` accounts aren't closed, so
+their rent isn't reclaimed, and the Data Streams path is tested against a mock verifier only (no
+provisioned streams were available).
 
 ## Settlement schedule
 
@@ -313,12 +337,13 @@ Every direct dependency in the npm and Cargo manifests, with the reason it's the
 
 ### SDK, worker and scripts
 
-| Package             | Why                                                                             |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `@solana/web3.js`   | Solana RPC, keypairs and transaction building in the SDK, worker and scripts    |
-| `@anchor-lang/core` | Anchor TypeScript client for calling the programs from the IDLs                 |
-| `bs58`              | Decodes base58 secret keys passed through environment variables                 |
-| `tsx`               | Runs TypeScript directly for the worker, scripts and tests without a build step |
+| Package                             | Why                                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------- |
+| `@solana/web3.js`                   | Solana RPC, keypairs and transaction building in the SDK, worker and scripts    |
+| `@anchor-lang/core`                 | Anchor TypeScript client for calling the programs from the IDLs                 |
+| `bs58`                              | Decodes base58 secret keys passed through environment variables                 |
+| `tsx`                               | Runs TypeScript directly for the worker, scripts and tests without a build step |
+| `@pythnetwork/pyth-solana-receiver` | Posts Hermes updates as verified `PriceUpdateV2` accounts when a slot is Pyth   |
 
 ### Tooling and tests
 
@@ -349,19 +374,20 @@ markets use custom times; otherwise the program enforces the regular schedule). 
 unwinds and redeems through the SDK builders. The worker runs the morning job scheduler, the
 settlement loop, the slot-1 relay (close records once a market's `close_ts` passes, and latest
 prices every 30 s in the session) and a per-minute collateral and supply audit that alerts
-`invariant_failure`. It ships both IDLs in `services/automation/idl` (`make ship-idls`), so a
+`invariant_failure`. Each oracle slot settles through the provider its env names
+(`ORACLE_SLOT_1` and `ORACLE_SLOT_2`: the relay, Pyth through the receiver program, or Data Streams
+through the verifier), with no code change to switch. It ships both IDLs in `services/automation/idl` (`make ship-idls`), so a
 deploy starts without `target/`. Lifecycle integration tests on a local validator cover create,
 mint, the four trade paths, the relay close, settlement, the admin fallback, redeem and both jobs
 against the real chain client; a validator test measures rent and compute and checks that a vault
-donation can't change payouts. `make dev` runs the whole stack on its own ports, `make demo` fills
-all four trade paths, and `make e2e` drives the web app in a browser. Close out orders and redeem
+donation can't change payouts. `make dev` runs the whole stack on its own ports, `make demo` replays the recorded AAPL close of
+2026-10-12 and fills all four trade paths, and `make e2e` drives the web app in a browser. Close out orders and redeem
 is one transaction unless the wallet has more resting orders than fit in one; then the wallet
 approves each transaction in order.
 
 Not finished yet:
 
 - The admin CLI (config updates, propose and finalize admin price, pause).
-- Worker support for settling through a Pyth or Data Streams slot (see [Price oracle](#price-oracle)).
 - A devnet run of `make demo`, and the first Railway deploy.
 
 ## Risks and limitations
@@ -370,9 +396,10 @@ Not finished yet:
   markets for good. Slot 2 is disabled, so there's no second source to cross-check, and if Yahoo is
   down at the close nothing settles until the admin fallback at +15 and +60 minutes.
 - **Unofficial price API.** The Yahoo chart API is undocumented and can change, rate-limit or
-  disappear without notice. It answered 429 to every attempt to record real responses, so the price
-  fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than captured,
-  and marked `hand-written` in `fixtures/provenance.json`. Run `npm run record-fixtures` in
+  disappear without notice. It answered 429 to every scripted attempt to record real responses, so
+  the price fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than
+  captured, and marked `hand-written` in `fixtures/provenance.json`. The one exception is the AAPL
+  close of 2026-10-12 the demo replays, whose values were transcribed from a single live response. Run `npm run record-fixtures` in
   `packages/price-providers` to replace them with real captures when the API answers.
   Its terms don't clearly allow republishing prices; that is acceptable for a devnet project with no
   real money, but any use beyond devnet needs a licensed data source. It may also block cloud IP
