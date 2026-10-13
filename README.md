@@ -355,7 +355,9 @@ Not finished yet:
   down at the close nothing settles until the admin fallback at +15 and +60 minutes.
 - **Unofficial price API.** The Yahoo chart API is undocumented and can change, rate-limit or
   disappear without notice. It answered 429 to every attempt to record real responses, so the price
-  fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than captured.
+  fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than captured,
+  and marked `hand-written` in `fixtures/provenance.json`. Run `npm run record-fixtures` in
+  `packages/price-providers` to replace them with real captures when the API answers.
   Its terms don't clearly allow republishing prices; that is acceptable for a devnet project with no
   real money, but any use beyond devnet needs a licensed data source. It may also block cloud IP
   ranges, which would stop live prices on a hosted worker.

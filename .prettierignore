@@ -8,3 +8,5 @@ coverage/
 package-lock.json
 ARCHITECTURE.md
 .npm/
+# Recorded API responses stay byte for byte; provenance.json pins their SHA-256.
+packages/price-providers/fixtures/yahoo/
