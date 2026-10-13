@@ -198,19 +198,39 @@ that in the MVP. What limits it: every published price and close record is publi
 rewritten, only regular-session prices near the close are accepted, the relay signer is a separate
 key, and the admin fallback and alerts cover a missing price.
 
-**Switching a slot to Pyth or Chainlink Data Streams.** The design makes this a configuration
-change: point a slot at Pyth or Chainlink with `update_config`, set `ORACLE_SLOT_1` (or
-`ORACLE_SLOT_2` to keep the relay running in slot 1) plus the provider's credentials
-(`PYTH_ACCESS_TOKEN`, or `CHAINLINK_DATA_STEAMS_USERNAME` and `CHAINLINK_HMAC_SECRET`), and restart
-the worker. Do it outside market hours. [ARCHITECTURE.md §5.6](ARCHITECTURE.md#56-switching-a-slot-to-pyth-or-chainlink)
-lists the steps, feed IDs and stream schema. What exists today: the off-chain Pyth and Chainlink
-normalizers in `packages/price-providers`, tested against sample payloads, and the on-chain
-adapters. `settle_market` reads a Pyth `PriceUpdateV2` account, and `settle_market_with_reports`
-verifies Data Streams reports through the verifier program; both share one closing-price, finalize
-and outcome path with the relay. On a third-party slot the first settle needs the automation
-authority or the admin. What doesn't yet: the worker only settles through the relay, and the admin
-CLI for `update_config` isn't built. So switching today needs that code as well as a paid or
-provisioned account.
+**Switching a slot to Pyth or Chainlink Data Streams.** It takes `update_config` plus worker env
+vars, with no code change. The worker reads `ORACLE_SLOT_1` and `ORACLE_SLOT_2` at start and refuses
+to start, naming the variable, when a kind is unknown or a setting it needs is missing or malformed.
+It settles each slot by its kind: a relay slot through `settle_market` with the relay `CloseRecord`;
+a Pyth slot by reading the Hermes update at `close_ts`, posting it through the Pyth receiver as a
+`PriceUpdateV2` account and passing that account to `settle_market`; a Data Streams slot by fetching
+the signed report at `close_ts` and sending its `fullReport` to `settle_market_with_reports`. A slot
+set to `disabled` in the env is never polled, whatever `Config` says. Steps, outside market hours so
+no ticker-day is half-settled under the old slot:
+
+1. Get the provider account: a Pyth plan entitled to US equities (an access token), or Data Streams
+   credentials (user ID and HMAC secret) with the US equity streams assigned.
+2. As the admin, call `update_config` with the new `oracle_slots` (there's no admin CLI yet, so use
+   the Anchor client as `tests/worker_pyth_slot.test.ts` does). For Pyth: `kind: { pyth: {} }`,
+   `feedIds` in `Config.tickers` order, `verifierProgram` = the receiver program, and
+   `minVerificationLevel: 0` (full Wormhole verification). For Data Streams:
+   `kind: { chainlinkDataStreams: {} }`, the stream IDs as `feedIds`, and `verifierProgram` = the
+   verifier program. Leave every other argument `null`.
+3. Set the worker env (see `.env.example`). For Pyth: `ORACLE_SLOT_1=pyth`,
+   `PYTH_RECEIVER_PROGRAM_ID`, `PYTH_FEED_IDS` (`AAPL=<64 hex>,MSFT=<64 hex>,…`) and
+   `PYTH_ACCESS_TOKEN`; `PYTH_HERMES_URL` is optional. For Data Streams: `ORACLE_SLOT_1=chainlink`,
+   `CHAINLINK_VERIFIER_PROGRAM_ID`, `CHAINLINK_STREAM_IDS`, `CHAINLINK_DATA_STREAMS_USERNAME` and
+   `CHAINLINK_HMAC_SECRET`; `CHAINLINK_DATA_STREAMS_URL` and `CHAINLINK_ACCESS_CONTROLLER_ID` are
+   optional. To keep the relay in slot 1, use slot 2 and `ORACLE_SLOT_2` instead.
+4. Restart the `automation` service. It fails fast if step 3 is incomplete.
+5. Check that the next close settles with `settle_source` equal to the switched slot.
+
+Rolling back is the same steps with `kind: { meridianRelay: {} }` and the relay signer, and
+`ORACLE_SLOT_1=relay`. On a third-party slot the first settle needs the automation authority or the
+admin, which is the worker's signer. [ARCHITECTURE.md §5.6](ARCHITECTURE.md#56-switching-a-slot-to-pyth-or-chainlink)
+lists the feed IDs and stream schema. Known gaps: posted `PriceUpdateV2` accounts aren't closed, so
+their rent isn't reclaimed, and the Data Streams path is tested against a mock verifier only (no
+provisioned streams were available).
 
 ## Settlement schedule
 
@@ -313,12 +333,13 @@ Every direct dependency in the npm and Cargo manifests, with the reason it's the
 
 ### SDK, worker and scripts
 
-| Package             | Why                                                                             |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `@solana/web3.js`   | Solana RPC, keypairs and transaction building in the SDK, worker and scripts    |
-| `@anchor-lang/core` | Anchor TypeScript client for calling the programs from the IDLs                 |
-| `bs58`              | Decodes base58 secret keys passed through environment variables                 |
-| `tsx`               | Runs TypeScript directly for the worker, scripts and tests without a build step |
+| Package                             | Why                                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------- |
+| `@solana/web3.js`                   | Solana RPC, keypairs and transaction building in the SDK, worker and scripts    |
+| `@anchor-lang/core`                 | Anchor TypeScript client for calling the programs from the IDLs                 |
+| `bs58`                              | Decodes base58 secret keys passed through environment variables                 |
+| `tsx`                               | Runs TypeScript directly for the worker, scripts and tests without a build step |
+| `@pythnetwork/pyth-solana-receiver` | Posts Hermes updates as verified `PriceUpdateV2` accounts when a slot is Pyth   |
 
 ### Tooling and tests
 
@@ -361,7 +382,6 @@ approves each transaction in order.
 Not finished yet:
 
 - The admin CLI (config updates, propose and finalize admin price, pause).
-- Worker support for settling through a Pyth or Data Streams slot (see [Price oracle](#price-oracle)).
 - A devnet run of `make demo`, and the first Railway deploy.
 
 ## Risks and limitations

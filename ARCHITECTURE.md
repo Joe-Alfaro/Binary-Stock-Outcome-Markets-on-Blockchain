@@ -381,8 +381,8 @@ Switching is configuration only: `update_config` on-chain plus env vars for the 
 | Step | Pyth | Chainlink Data Streams |
 | --- | --- | --- |
 | 1. Account | A Pyth plan entitled to US equities | US equity streams assigned to the account, testnet credentials and the devnet verifier program ID |
-| 2. Worker env | `ORACLE_SLOT_1=pyth`, `PYTH_ACCESS_TOKEN` | `ORACLE_SLOT_1=chainlink`, `CHAINLINK_DATA_STEAMS_USERNAME`, `CHAINLINK_HMAC_SECRET` |
-| 3. On-chain | `admin update-config --slot 1 --kind pyth --feed-ids <7 ids> --min-verification full` | `admin update-config --slot 1 --kind chainlink --stream-ids <7 ids> --verifier <program id>` |
+| 2. Worker env | `ORACLE_SLOT_1=pyth`, `PYTH_RECEIVER_PROGRAM_ID`, `PYTH_FEED_IDS`, `PYTH_ACCESS_TOKEN` | `ORACLE_SLOT_1=chainlink`, `CHAINLINK_VERIFIER_PROGRAM_ID`, `CHAINLINK_STREAM_IDS`, `CHAINLINK_DATA_STREAMS_USERNAME`, `CHAINLINK_HMAC_SECRET` |
+| 3. On-chain | `update_config` (admin): slot kind `pyth`, the 7 feed IDs, `verifier_program` = the receiver program, `min_verification_level` 0 (full) | `update_config` (admin): slot kind `chainlinkDataStreams`, the 7 stream IDs, `verifier_program` = the verifier program |
 | 4. Restart | Restart the `automation` service | Restart the `automation` service |
 | 5. Check | `make demo` on devnet settles from the new slot | Same |
 
@@ -401,13 +401,13 @@ To keep the relay running alongside, use slot 2 instead of slot 1 (`ORACLE_SLOT_
   | NVDA | `b1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593` |
   | META | `78a3e3b8e676a8f73c439f5d749737034b139bbbe899ba5775216fba596607fe` |
   | TSLA | `16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1` |
-- **Off-chain:** the worker calls Hermes `GET /v2/updates/price/{publish_time}?ids[]=…` with `Authorization: Bearer $PYTH_ACCESS_TOKEN` for times just before and after `close_ts`, and posts the signed updates through the Pyth Solana receiver program (same address on devnet and mainnet). Pyth does not keep equity accounts fresh on Solana itself, so we post our own.
+- **Off-chain:** the worker calls Hermes `GET /v2/updates/price/{publish_time}?ids[]=…` with `Authorization: Bearer $PYTH_ACCESS_TOKEN` at `close_ts`, and posts the signed updates through the Pyth Solana receiver program (same address on devnet and mainnet). Pyth does not keep equity accounts fresh on Solana itself, so we post our own.
 - **On-chain:** the adapter reads the receiver's price update accounts, requires full verification, and maps `price`, `conf`, `exponent` and `publish_time` to `NormalizedPrice`. Session comes from the publish time falling inside regular hours. Pyth does not label an official close, so it settles through shapes 2 and 3.
 
 ### 5.8 Chainlink Data Streams adapter
 
 - **Streams:** US equity streams in the **RWA Advanced (v11)** report schema, which Chainlink recommends for US equities. It includes `mid`, `bid`, `ask`, `lastTradedPrice`, `marketStatus` and `lastSeenTimestampNs`.
-- **Off-chain:** the worker calls `GET /api/v1/reports?feedID=…&timestamp=…` (HMAC-signed headers using `CHAINLINK_DATA_STEAMS_USERNAME` and `CHAINLINK_HMAC_SECRET`; set a `User-Agent` header, which the API requires) for timestamps just before and after `close_ts`, and passes each `fullReport` to `settle_market`.
+- **Off-chain:** the worker calls `GET /api/v1/reports?feedID=…&timestamp=…` (HMAC-signed headers using `CHAINLINK_DATA_STREAMS_USERNAME` and `CHAINLINK_HMAC_SECRET`; set a `User-Agent` header, which the API requires) at `close_ts`, and passes the `fullReport` to `settle_market_with_reports`.
 - **On-chain:** the adapter verifies each report by CPI to the Chainlink verifier program and decodes it. `price = lastTradedPrice` if present, else `mid`; `conf = (ask − bid) / 2`; `session = Regular` only when `marketStatus` is regular hours. No official close label.
 
 ---
@@ -567,9 +567,16 @@ RELAY_1_SOURCE=yahoo
 RELAY_2_SOURCE=                # set when a second relay source exists
 
 # Third-party oracles (only when a slot is switched to them)
-CHAINLINK_DATA_STEAMS_USERNAME=
-CHAINLINK_HMAC_SECRET=
+PYTH_RECEIVER_PROGRAM_ID=
+PYTH_FEED_IDS=                 # TICKER=<64 hex digits>, comma-separated
 PYTH_ACCESS_TOKEN=
+PYTH_HERMES_URL=               # default https://hermes.pyth.network
+CHAINLINK_VERIFIER_PROGRAM_ID=
+CHAINLINK_STREAM_IDS=          # TICKER=<64 hex digits>, comma-separated
+CHAINLINK_DATA_STREAMS_USERNAME=
+CHAINLINK_HMAC_SECRET=
+CHAINLINK_DATA_STREAMS_URL=    # default https://api.dataengine.chain.link
+CHAINLINK_ACCESS_CONTROLLER_ID= # default: the verifier's published access controller
 
 # Ops
 ALERT_SINKS=console            # comma-separated: console, webhook
@@ -583,7 +590,7 @@ NEXT_PUBLIC_MERIDIAN_ORACLE_PROGRAM_ID=
 NEXT_PUBLIC_RELAY_SIGNER_1=    # public key whose LatestPrice accounts the app reads
 ```
 
-`CHAINLINK_DATA_STEAMS_USERNAME` keeps the spelling already used in the local `.env`. The Yahoo source needs no key. `NEXT_PUBLIC_PRICE_API_URL` and `CHAINLINK_CANDLESTICK_API_KEY` are no longer used and should be removed from `.env.example` with the code that reads env vars.
+An earlier `.env` that spells it `CHAINLINK_DATA_STEAMS_USERNAME` must be renamed. The Yahoo source needs no key. `NEXT_PUBLIC_PRICE_API_URL` and `CHAINLINK_CANDLESTICK_API_KEY` are no longer used and should be removed from `.env.example` with the code that reads env vars.
 
 ---
 

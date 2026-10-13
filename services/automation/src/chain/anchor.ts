@@ -3,8 +3,10 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import anchor from '@anchor-lang/core'
 import type { Idl } from '@anchor-lang/core'
+import { createDataStreamsClient, createPythHermesProvider } from '@meridian/price-providers'
+import type { DataStreamsClient, PythHermesProvider } from '@meridian/price-providers'
 import { PublicKey } from '@solana/web3.js'
-import type { Connection, GetProgramAccountsFilter, Keypair } from '@solana/web3.js'
+import type { AccountMeta, Connection, GetProgramAccountsFilter, Keypair } from '@solana/web3.js'
 import {
   ADMIN_PRICE_EXPO,
   MARKET_STATUS_OFFSET,
@@ -35,7 +37,10 @@ import type {
   OpenMarketFilter,
   OracleSlot,
   PendingAdminPrice,
+  PythUpdateAccounts,
+  SettleMarketResult,
 } from './types.js'
+import type { OracleSlotSetting, OracleSlotSettings } from '../config.js'
 
 // The package is CommonJS and Node can't detect all of its named exports.
 const { AnchorProvider, BN, Program, Wallet, utils } = anchor
@@ -44,6 +49,19 @@ const { AnchorProvider, BN, Program, Wallet, utils } = anchor
 const COMMITMENT = 'confirmed'
 const DEFAULT_RETRY = { attempts: 3, baseDelayMs: 500 }
 const encoder = new TextEncoder()
+const DEFAULT_SLOT_SETTINGS: OracleSlotSettings = {
+  slot1: { kind: 'relay' },
+  slot2: { kind: 'disabled' },
+}
+/**
+ * The Data Streams verifier's access controller account, the same on devnet and mainnet
+ * (docs.chain.link, Data Streams on Solana).
+ */
+export const DEFAULT_CHAINLINK_ACCESS_CONTROLLER = new PublicKey(
+  '2k3DsgwBoqrnvXKVvd7jX7aptNxdcRBdcd5HkYsGgbrb',
+)
+/** The verifier keys a report's config account by the report's first word, its config digest. */
+const CONFIG_DIGEST_BYTES = 32
 
 /** Where `anchor build` writes the IDLs, from the repo root whatever the working directory. */
 const BUILT_IDL_DIR = fileURLToPath(new URL('../../../../target/idl/', import.meta.url))
@@ -105,6 +123,63 @@ export interface AnchorChainClientOptions {
   oracleProgramId?: PublicKey
   /** Bounded retries for transport failures. Defaults to 3 tries, 500 ms then 1 s apart. */
   retry?: Partial<RetryPolicy>
+  /**
+   * How each slot settles, from `ORACLE_SLOT_<n>` (`loadOracleSlotSettings`). Defaults to slot 1
+   * on the relay and slot 2 disabled.
+   */
+  slotSettings?: OracleSlotSettings
+  /** Finds or posts the `PriceUpdateV2` accounts a Pyth slot settles from. */
+  pythUpdates?: PythUpdateAccounts
+  /** For the Pyth and Data Streams HTTP providers. Defaults to the global `fetch`. */
+  fetch?: typeof fetch
+  /** Milliseconds, for request signing. Defaults to `Date.now`. */
+  now?: () => number
+  /** The Data Streams verifier's access controller. Defaults to `DEFAULT_CHAINLINK_ACCESS_CONTROLLER`. */
+  chainlinkAccessController?: PublicKey
+}
+
+/** The HTTP client each third-party slot reads its inputs from. */
+interface SlotInputs {
+  pyth?: PythHermesProvider
+  chainlink?: DataStreamsClient
+}
+
+function slotInputs(
+  setting: OracleSlotSetting,
+  fetchImpl: typeof fetch | undefined,
+  now: () => number,
+): SlotInputs {
+  const http = fetchImpl ? { fetch: fetchImpl } : {}
+  if (setting.kind === 'pyth') {
+    return {
+      pyth: createPythHermesProvider({
+        baseUrl: setting.hermesUrl,
+        accessToken: setting.accessToken,
+        feedIds: setting.feedIds,
+        ...http,
+      }),
+    }
+  }
+  if (setting.kind === 'chainlink') {
+    return {
+      chainlink: createDataStreamsClient({
+        baseUrl: setting.apiUrl,
+        username: setting.username,
+        secret: setting.secret,
+        streamIds: setting.streamIds,
+        now,
+        ...http,
+      }),
+    }
+  }
+  return {}
+}
+
+/** An on-chain kind with no matching `ORACLE_SLOT_<n>`: the worker has no credentials for it. */
+function slotMismatch(slot: OracleSlot, chainKind: string, setting: OracleSlotSetting): Error {
+  return new Error(
+    `oracle slot ${slot} is ${chainKind} on-chain but ORACLE_SLOT_${slot}=${setting.kind}`,
+  )
 }
 
 /** The Anchor client also lets the admin propose a fallback price (R36). */
@@ -186,6 +261,14 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
   // `Program` camel-cases the IDL, so account names are `config`, `market` and `tickerDay`.
   const coder = program.coder.accounts
   const retry = <T>(fn: () => Promise<T>) => withRetry(policy, fn)
+  const slotSettings = options.slotSettings ?? DEFAULT_SLOT_SETTINGS
+  const now = options.now ?? Date.now
+  const inputs: Record<OracleSlot, SlotInputs> = {
+    1: slotInputs(slotSettings.slot1, options.fetch, now),
+    2: slotInputs(slotSettings.slot2, options.fetch, now),
+  }
+  const settingOf = (slot: OracleSlot) => (slot === 1 ? slotSettings.slot1 : slotSettings.slot2)
+  const accessController = options.chainlinkAccessController ?? DEFAULT_CHAINLINK_ACCESS_CONTROLLER
 
   const pda = (owner: PublicKey, seeds: Uint8Array[]) =>
     PublicKey.findProgramAddressSync(seeds, owner)[0]
@@ -290,6 +373,105 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
     }
   }
 
+  interface SettleTarget {
+    market: OpenMarket
+    slot: OracleSlot
+    address: PublicKey
+    tickerDay: PublicKey
+  }
+
+  /** Sends one settle instruction, then reads the price the ticker-day settled at. */
+  async function sendSettle(
+    { tickerDay }: SettleTarget,
+    send: () => Promise<string>,
+  ): Promise<SettleMarketResult> {
+    try {
+      await retry(send)
+    } catch (error) {
+      if (/MarketSettled/.test(errorText(error))) return { status: 'already_settled' }
+      throw error
+    }
+    const final = await fetchAccount<TickerDayAccount>('tickerDay', tickerDay)
+    if (!final) throw new Error(`ticker-day ${tickerDay.toBase58()} vanished`)
+    return {
+      status: 'settled',
+      price: { price: BigInt(final.settlePrice.toString()), expo: final.settleExpo },
+      source: settleSource(final.settleSource),
+    }
+  }
+
+  /** `settle_market` reading `closeRecord`, then `remaining` as further inputs. */
+  function settleFromAccounts(
+    target: SettleTarget,
+    closeRecord: PublicKey,
+    remaining: PublicKey[],
+  ): Promise<SettleMarketResult> {
+    const remainingAccounts: AccountMeta[] = remaining.map((pubkey) => ({
+      pubkey,
+      isSigner: false,
+      isWritable: false,
+    }))
+    return sendSettle(target, () =>
+      method('settleMarket')(programSlot(target.slot))
+        .accountsPartial({
+          caller: authority.publicKey,
+          tickerDay: target.tickerDay,
+          market: target.address,
+          closeRecord,
+        })
+        .remainingAccounts(remainingAccounts)
+        .rpc(),
+    )
+  }
+
+  /**
+   * A Pyth slot: the Hermes update at `close_ts`, posted or found as `PriceUpdateV2` accounts.
+   * The first account goes in `close_record`, the rest follow as remaining accounts.
+   */
+  async function settleFromPyth(target: SettleTarget): Promise<SettleMarketResult> {
+    const setting = settingOf(target.slot)
+    const hermes = inputs[target.slot].pyth
+    if (!hermes) throw slotMismatch(target.slot, 'Pyth', setting)
+    if (!options.pythUpdates) throw new Error('a Pyth slot needs a PriceUpdateV2 locator')
+    const update = await hermes.prepareClose(target.market.ticker, target.market.closeTs)
+    if (!update) return { status: 'no_price' }
+    const [first, ...rest] = await options.pythUpdates.accountsFor(update, target.market)
+    if (!first) return { status: 'no_price' }
+    return settleFromAccounts(target, first, rest)
+  }
+
+  /**
+   * A Data Streams slot: `settle_market_with_reports` with the signed reports at `close_ts`,
+   * verified on-chain by the slot's verifier program through its `verify` accounts.
+   */
+  async function settleFromReports(target: SettleTarget): Promise<SettleMarketResult> {
+    const setting = settingOf(target.slot)
+    const streams = inputs[target.slot].chainlink
+    if (!streams || setting.kind !== 'chainlink') {
+      throw slotMismatch(target.slot, 'ChainlinkDataStreams', setting)
+    }
+    const reports = await streams.reportsAt(target.market.ticker, target.market.closeTs)
+    const [firstReport] = reports?.fullReports ?? []
+    if (!reports || !firstReport) return { status: 'no_price' }
+    const verifierProgram = new PublicKey(setting.verifierProgram)
+    return sendSettle(target, () =>
+      method('settleMarketWithReports')(
+        programSlot(target.slot),
+        reports.fullReports.map((report) => Buffer.from(report)),
+      )
+        .accountsPartial({
+          caller: authority.publicKey,
+          tickerDay: target.tickerDay,
+          market: target.address,
+          verifierProgram,
+          verifierAccount: pda(verifierProgram, [encoder.encode('verifier')]),
+          accessController,
+          reportConfig: pda(verifierProgram, [firstReport.slice(0, CONFIG_DIGEST_BYTES)]),
+        })
+        .rpc(),
+    )
+  }
+
   return {
     oracleProgramId,
 
@@ -356,35 +538,17 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
       if (!day) throw new Error(`AccountNotInitialized: ticker-day ${tickerDay.toBase58()}`)
       const oracleSlot = (await readConfig()).oracleSlots[programSlot(slot)]
       if (!oracleSlot) throw new Error(`Config has no oracle slot ${slot}`)
+      const settle = { market, slot, address, tickerDay }
       const closeRecord = closeRecordPda(oracleSlot.relaySigner, market.ticker, market.tradingDay)
-      // Until the ticker-day is final, settling needs the slot's close record; once it is final,
-      // the program ignores the record and uses the stored price.
-      const needsRecord =
-        isVariant(day.status, 'open') && oracleKind(oracleSlot.kind) === 'MeridianRelay'
-      if (needsRecord && !(await exists(closeRecord))) return { status: 'no_price' }
+      // Once the ticker-day is final, the program ignores the slot's inputs and uses the stored
+      // price, so every kind settles the next strike through `settle_market` without fetching.
+      if (!isVariant(day.status, 'open')) return settleFromAccounts(settle, closeRecord, [])
 
-      try {
-        await retry(() =>
-          method('settleMarket')(programSlot(slot))
-            .accountsPartial({
-              caller: authority.publicKey,
-              tickerDay,
-              market: address,
-              closeRecord,
-            })
-            .rpc(),
-        )
-      } catch (error) {
-        if (/MarketSettled/.test(errorText(error))) return { status: 'already_settled' }
-        throw error
-      }
-      const final = await fetchAccount<TickerDayAccount>('tickerDay', tickerDay)
-      if (!final) throw new Error(`ticker-day ${tickerDay.toBase58()} vanished`)
-      return {
-        status: 'settled',
-        price: { price: BigInt(final.settlePrice.toString()), expo: final.settleExpo },
-        source: settleSource(final.settleSource),
-      }
+      const kind = oracleKind(oracleSlot.kind)
+      if (kind === 'Pyth') return settleFromPyth(settle)
+      if (kind === 'ChainlinkDataStreams') return settleFromReports(settle)
+      if (kind === 'MeridianRelay' && !(await exists(closeRecord))) return { status: 'no_price' }
+      return settleFromAccounts(settle, closeRecord, [])
     },
 
     async finalizeAdminSettle(ticker, tradingDay) {

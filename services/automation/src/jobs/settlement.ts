@@ -6,6 +6,7 @@ import type {
   OracleSlot,
   OracleSlots,
 } from '../chain/index.js'
+import type { OracleSlotSettings } from '../config.js'
 import type { Clock } from './clock.js'
 import type { JobLogger } from './logger.js'
 import { formatPrice, samePrice } from './price.js'
@@ -17,6 +18,11 @@ export interface SettlementJobDeps {
   log: JobLogger
   /** Stops the job; the returned promise resolves once it has stopped. */
   signal: AbortSignal
+  /**
+   * `ORACLE_SLOT_<n>`: a slot this worker has disabled is never polled, whatever `Config` holds.
+   * Omitted, every slot `Config` enables is polled.
+   */
+  slotSettings?: OracleSlotSettings
 }
 
 const SECOND_MS = 1_000
@@ -54,7 +60,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function slotEnabled(slots: OracleSlots, slot: OracleSlot): boolean {
+/** Enabled in `Config` and not disabled by this worker's `ORACLE_SLOT_<n>`. */
+function slotEnabled(
+  slots: OracleSlots,
+  slot: OracleSlot,
+  settings: OracleSlotSettings | undefined,
+): boolean {
+  const setting = slot === 1 ? settings?.slot1 : settings?.slot2
+  if (setting?.kind === 'disabled') return false
   return (slot === 1 ? slots.slot1 : slots.slot2) !== 'Disabled'
 }
 
@@ -105,7 +118,9 @@ class TickerDaySettler {
 
     while (!signal.aborted && !this.#done) {
       const slots = this.#ctx.slots()
-      const polled = ([1, 2] as const).filter((slot) => slotEnabled(slots, slot))
+      const polled = ([1, 2] as const).filter((slot) =>
+        slotEnabled(slots, slot, this.#ctx.slotSettings),
+      )
       const wakeAt = Math.min(
         ...polled.map((slot) => next[slot]),
         next.admin,

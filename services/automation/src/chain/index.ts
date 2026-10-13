@@ -18,5 +18,6 @@ export type {
   OracleSlot,
   OracleSlots,
   PendingAdminPrice,
+  PythUpdateAccounts,
   SettleMarketResult,
 } from './types.js'
