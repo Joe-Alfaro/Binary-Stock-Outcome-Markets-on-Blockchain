@@ -1,34 +1,19 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { toChainError } from '../lib/chain'
 import { formatUsdc, shortAddress } from '../lib/format'
-import { useWalletKey } from '../lib/hooks'
+import { useUsdcBalance, useWalletKey } from '../lib/hooks'
 import { useServices } from '../lib/services'
 
 /** Connect, show the address and USDC balance, and disconnect (R48). */
 export function WalletButton() {
-  const { chain, wallet } = useServices()
+  const { wallet } = useServices()
   const owner = useWalletKey()
   const [open, setOpen] = useState(false)
-  const [balance, setBalance] = useState<number | null>(null)
+  const balance = useUsdcBalance(owner)
   const [error, setError] = useState<string | null>(null)
   const pickerId = useId()
-
-  useEffect(() => {
-    setBalance(null)
-    if (!owner) return
-    let active = true
-    chain
-      .getUsdcBalance(owner)
-      .then((value) => {
-        if (active) setBalance(value)
-      })
-      .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [chain, owner])
 
   async function connect(name: string) {
     setError(null)
