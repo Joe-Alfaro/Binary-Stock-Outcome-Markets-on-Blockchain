@@ -136,7 +136,7 @@ describe('vault donation: mint, merge, trade, settle and redeem in one scenario 
     const now = await chainNow()
     market = await createMarket({
       ticker: 'AAPL',
-      tradingDay: '2026-11-09',
+      tradingDay: '2026-11-12',
       strike: 24_000n,
       closeTs: now + 60,
       openTs: now - 60,
@@ -239,7 +239,7 @@ describe('maximum sweep compute on the local validator (R19)', () => {
     const now = await chainNow()
     market = await createMarket({
       ticker: 'MSFT',
-      tradingDay: '2026-11-10',
+      tradingDay: '2026-11-13',
       strike: 52_000n,
       closeTs: now + 1800,
       openTs: now - 60,
