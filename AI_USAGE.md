@@ -2,6 +2,17 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Trading calendar and alert sinks (`feat/calendar-alerts`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), as a test worker and a separate implementation worker.
+- **What the AI did:** the test worker wrote red `node:test` suites for the NYSE calendar (holidays,
+  early closes, DST, previous trading day, input validation) and the alert sinks, with interface
+  stubs. The implementation worker filled in `services/automation/src/calendar` (checked-in 2026
+  and 2027 holiday and early-close data, `America/New_York` session times) and
+  `services/automation/src/alerts` (log sink, JSON webhook sink with a timeout, env-based sink
+  selection, an alerter that contains sink failures) without changing the tests.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — Architecture update (`docs/architecture-update`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), running as an implementation worker.
