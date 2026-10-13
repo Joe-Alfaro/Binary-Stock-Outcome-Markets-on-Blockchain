@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { createMockSource } from '@meridian/price-providers'
+import { createMockSource, createRelaySource } from '@meridian/price-providers'
 import { createRelayPublisher } from './index.js'
 import {
   captureLog,
@@ -21,7 +21,10 @@ function setup(demo: boolean, closeTs: number) {
   const log = captureLog()
   const publisher = createRelayPublisher({
     oracle,
-    source: createMockSource(),
+    // The source the worker builds from its env: in demo mode the mock replays the recorded close.
+    source: demo
+      ? createRelaySource({ RELAY_1_SOURCE: 'mock', DEMO_MODE: 'true' })
+      : createMockSource(),
     tickers: ['AAPL', 'MSFT'],
     clock,
     log: log.write,
@@ -40,9 +43,9 @@ describe('R44 demo relay', () => {
     assert.equal(close?.closeTs, DEMO_CLOSE)
     assert.equal(close?.tradingDay, 20_261_012)
     const [update] = close?.updates ?? []
-    // The recorded AAPL close of 2026-10-09 was $245.27.
-    assert.equal(update?.price, 2_452_700_000_000n)
-    assert.equal(update?.publishTime, DEMO_CLOSE)
+    // The recorded AAPL official close of 2026-10-12 was $340.97, stamped 16:00:01 ET.
+    assert.equal(update?.price, 3_409_700_000_000n)
+    assert.equal(update?.publishTime, DEMO_CLOSE + 1)
     assert.equal(update?.officialClose, true)
   })
 

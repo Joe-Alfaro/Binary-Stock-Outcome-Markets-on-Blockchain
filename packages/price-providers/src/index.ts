@@ -1,5 +1,6 @@
 export { normalizeChainlinkV11Report } from './chainlink.js'
 export { relayConfidence } from './confidence.js'
+export { createDemoReplaySource } from './demo-replay.js'
 export type { ConfidenceInputs } from './confidence.js'
 export { PriceSourceError } from './errors.js'
 export type { PriceSourceErrorCode } from './errors.js'
