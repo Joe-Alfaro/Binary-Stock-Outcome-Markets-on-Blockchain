@@ -6,17 +6,27 @@
  * The update account is written byte for byte in the receiver's layout, as the LiteSVM adapter
  * tests do (`programs/meridian/tests/price_adapter_pyth.rs`), from the recorded Hermes sample
  * re-timed to this market's close. A validator only takes such an account at genesis, so this
- * suite starts its own validator, on ports clear of CI's (override with PYTH_SLOT_TEST_*).
+ * suite starts its own validator with one update account planted per second of the next
+ * `PLANTED_SECS`, and creates the market after setup, closing at one of those seconds. Setup time
+ * on a busy host then only moves the close. The validator takes the first free port block outside
+ * CI's reserved ports (or the PYTH_SLOT_TEST_* ports when set).
  * Hermes is a local HTTP server answering from the same sample, and the worker's update-account
  * locator hands back the planted account instead of posting through the receiver.
  *
  * Needs `anchor build`. Runs with the other Anchor integration tests, or alone:
  *   npx mocha --node-option import=tsx --timeout 1000000 tests/worker_pyth_slot.test.ts
  */
-import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer as createHttpServer, type Server } from 'node:http'
-import { createServer as createTcpServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import anchorPackage from '@anchor-lang/core'
@@ -43,15 +53,12 @@ import type { MeridianOracle } from '../target/types/meridian_oracle.js'
 
 const { AnchorProvider, BN, Program: AnchorProgram, Wallet } = anchorPackage
 
-const PORTS = {
-  rpc: Number(process.env.PYTH_SLOT_TEST_RPC_PORT || 8965),
-  faucet: Number(process.env.PYTH_SLOT_TEST_FAUCET_PORT || 8967),
-  gossip: Number(process.env.PYTH_SLOT_TEST_GOSSIP_PORT || 9255),
-  range: process.env.PYTH_SLOT_TEST_DYNAMIC_PORT_RANGE || '9256-9295',
-}
-const RPC_URL = `http://127.0.0.1:${PORTS.rpc}`
-/** Seconds from now to the market close: room to start the validator and set the market up. */
-const CLOSE_IN_SECS = 90
+/** Seconds after setup to the market close: room to create the markets and switch the slot. */
+const CLOSE_MARGIN_SECS = 20
+/** Seconds of planted update accounts, longer than Mocha's 1000 s hook timeout. */
+const PLANTED_SECS = 1_200
+/** Agave needs room for its TPU, TVU and repair sockets. */
+const DYNAMIC_PORT_COUNT = 40
 
 const TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA'] as const
 const TRADING_DAY = '2026-11-16'
@@ -163,17 +170,64 @@ function builtIdl(name: 'meridian' | 'meridian_oracle') {
   return JSON.parse(readFileSync(path, 'utf8')) as { address: string }
 }
 
-/** Fails fast, naming the port, when another process holds one. */
-async function assertPortsFree(ports: number[]) {
-  for (const port of ports) {
-    await new Promise<void>((resolve, reject) => {
-      const server = createTcpServer()
-      server.once('error', () =>
-        reject(new Error(`port ${port} is in use; set the PYTH_SLOT_TEST_* ports`)),
-      )
-      server.listen(port, '127.0.0.1', () => server.close(() => resolve()))
-    })
+/** Whether any process holds a TCP or UDP port in `low..high`. */
+function portsBusy(low: number, high: number) {
+  // The output, not the status: lsof exits 1 when any one selector matches nothing.
+  const { stdout } = spawnSync('lsof', ['-nP', `-iTCP:${low}-${high}`, `-iUDP:${low}-${high}`], {
+    encoding: 'utf8',
+  })
+  return stdout.trim() !== ''
+}
+
+/** The first block of `size` free ports from `low`, stepping by `size`, below `high`. */
+function freeBlock(what: string, low: number, high: number, size: number) {
+  for (let start = low; start + size - 1 <= high; start += size) {
+    if (!portsBusy(start, start + size - 1)) return start
   }
+  throw new Error(`no free ${what} ports in ${low}-${high}; set the PYTH_SLOT_TEST_* ports`)
+}
+
+/**
+ * The validator's ports: the PYTH_SLOT_TEST_* ones when set, otherwise the first free blocks
+ * clear of CI's (8899-8900, 9900, 9600-9650), Agave's default gossip 8000 and `make dev`'s 8913.
+ * The RPC WebSocket takes the RPC port + 1 and the faucet the one after.
+ */
+function validatorPorts(env: NodeJS.ProcessEnv) {
+  if (env.PYTH_SLOT_TEST_RPC_PORT) {
+    const rpc = Number(env.PYTH_SLOT_TEST_RPC_PORT)
+    const gossip = Number(env.PYTH_SLOT_TEST_GOSSIP_PORT || 9255)
+    return {
+      rpc,
+      faucet: Number(env.PYTH_SLOT_TEST_FAUCET_PORT || rpc + 2),
+      gossip,
+      range:
+        env.PYTH_SLOT_TEST_DYNAMIC_PORT_RANGE || `${gossip + 1}-${gossip + DYNAMIC_PORT_COUNT}`,
+    }
+  }
+  const rpc = freeBlock('RPC', 8965, 8998, 3)
+  const gossip = freeBlock('gossip', 9255, 9590, DYNAMIC_PORT_COUNT + 1)
+  return {
+    rpc,
+    faucet: rpc + 2,
+    gossip,
+    range: `${gossip + 1}-${gossip + DYNAMIC_PORT_COUNT}`,
+  }
+}
+
+/** The JSON `--account-dir` takes for a receiver-owned `PriceUpdateV2` at `address`. */
+function plantedAccount(address: PublicKey, entry: HermesEntry) {
+  const data = priceUpdateV2(entry)
+  return JSON.stringify({
+    pubkey: address.toBase58(),
+    account: {
+      lamports: LAMPORTS_PER_SOL,
+      data: [data.toString('base64'), 'base64'],
+      owner: RECEIVER.toBase58(),
+      executable: false,
+      rentEpoch: 0,
+      space: data.length,
+    },
+  })
 }
 
 /** Polls `check` every second until it returns a value, failing after `timeoutMs`. */
@@ -244,16 +298,20 @@ describe('worker settles through a Pyth slot switched by update_config and env v
   const admin = Keypair.generate()
   const automation = Keypair.generate()
   const relay = Keypair.generate()
-  const updateAccount = Keypair.generate().publicKey
-  const closeTs = Math.floor(Date.now() / 1000) + CLOSE_IN_SECS
+  /** The planted update account published at each second, keyed by that unix time. */
+  const planted = new Map<number, PublicKey>()
+  let closeTs = 0
   const located: { update: PythCloseUpdate; market: OpenMarket }[] = []
   const pythUpdates: PythUpdateAccounts = {
     async accountsFor(update, market) {
       located.push({ update, market })
-      return [updateAccount]
+      const account = planted.get(update.closeTs)
+      if (!account) throw new Error(`no planted update account at ${update.closeTs}`)
+      return [account]
     },
   }
 
+  let rpcUrl = ''
   let validator: ChildProcess | undefined
   let hermes: Awaited<ReturnType<typeof startHermes>> | undefined
   let worker: Worker | undefined
@@ -265,25 +323,21 @@ describe('worker settles through a Pyth slot switched by update_config and env v
   before(async () => {
     const meridianId = builtIdl('meridian').address
     const oracleIdl = builtIdl('meridian_oracle')
-    const [rangeStart] = PORTS.range.split('-').map(Number)
-    await assertPortsFree([PORTS.rpc, PORTS.rpc + 1, PORTS.faucet, PORTS.gossip, rangeStart ?? 0])
+    const ports = validatorPorts(process.env)
+    rpcUrl = `http://127.0.0.1:${ports.rpc}`
 
-    const accountFile = join(ledger, 'price-update.json')
-    const data = priceUpdateV2(aaplAt(closeTs))
-    writeFileSync(
-      accountFile,
-      JSON.stringify({
-        pubkey: updateAccount.toBase58(),
-        account: {
-          lamports: 10 * LAMPORTS_PER_SOL,
-          data: [data.toString('base64'), 'base64'],
-          owner: RECEIVER.toBase58(),
-          executable: false,
-          rentEpoch: 0,
-          space: data.length,
-        },
-      }),
-    )
+    const accountDir = join(ledger, 'price-updates')
+    mkdirSync(accountDir)
+    const firstPlanted = Math.floor(Date.now() / 1000) + CLOSE_MARGIN_SECS
+    for (let publishTs = firstPlanted; publishTs < firstPlanted + PLANTED_SECS; publishTs++) {
+      const address = Keypair.generate().publicKey
+      planted.set(publishTs, address)
+      writeFileSync(
+        join(accountDir, `${publishTs}.json`),
+        plantedAccount(address, aaplAt(publishTs)),
+      )
+    }
+    const validatorOutput = openSync(join(ledger, 'validator.out'), 'w')
     validator = spawn(
       'solana-test-validator',
       [
@@ -294,13 +348,13 @@ describe('worker settles through a Pyth slot switched by update_config and env v
         '--bind-address',
         '127.0.0.1',
         '--rpc-port',
-        String(PORTS.rpc),
+        String(ports.rpc),
         '--faucet-port',
-        String(PORTS.faucet),
+        String(ports.faucet),
         '--gossip-port',
-        String(PORTS.gossip),
+        String(ports.gossip),
         '--dynamic-port-range',
-        PORTS.range,
+        ports.range,
         '--upgradeable-program',
         meridianId,
         'target/deploy/meridian.so',
@@ -309,17 +363,26 @@ describe('worker settles through a Pyth slot switched by update_config and env v
         oracleIdl.address,
         'target/deploy/meridian_oracle.so',
         upgradeAuthority.publicKey.toBase58(),
-        '--account',
-        updateAccount.toBase58(),
-        accountFile,
+        '--account-dir',
+        accountDir,
       ],
-      { stdio: 'ignore' },
+      { stdio: ['ignore', validatorOutput, validatorOutput] },
     )
 
-    connection = new Connection(RPC_URL, 'confirmed')
-    await eventually('the validator to answer', 60_000, async () =>
-      (await connection.getAccountInfo(new PublicKey(meridianId)))?.executable ? true : null,
-    )
+    connection = new Connection(rpcUrl, 'confirmed')
+    const deadline = Date.now() + 60_000
+    while (
+      !(await connection.getAccountInfo(new PublicKey(meridianId)).catch(() => null))?.executable
+    ) {
+      if (validator.exitCode !== null || Date.now() > deadline) {
+        const output = readFileSync(join(ledger, 'validator.out'), 'utf8').trim().split('\n')
+        expect.fail(
+          `the validator on ${rpcUrl} did not answer within 60 s` +
+            ` (exit ${validator.exitCode}):\n${output.slice(-15).join('\n')}`,
+        )
+      }
+      await sleep(SECOND_MS)
+    }
     const provider = new AnchorProvider(connection, new Wallet(upgradeAuthority), {
       commitment: 'confirmed',
       preflightCommitment: 'confirmed',
@@ -415,9 +478,12 @@ describe('worker settles through a Pyth slot switched by update_config and env v
     const day = u32Le(dayNumber(TRADING_DAY))
     const ticker = Uint8Array.from(tickerBytes('AAPL'))
     tickerDay = pda(meridian.programId, [encoder.encode('day'), ticker, day])
-    const openTs = Math.floor(Date.now() / 1000) - 60
-    if (Math.floor(Date.now() / 1000) >= closeTs - 5) {
-      expect.fail(`setup ran past the planned close; raise CLOSE_IN_SECS (${CLOSE_IN_SECS} s)`)
+    // The close is set only now that setup is done, at a second with a planted update.
+    const now = Math.floor(Date.now() / 1000)
+    const openTs = now - 60
+    closeTs = Math.max(now + CLOSE_MARGIN_SECS, firstPlanted)
+    if (!planted.has(closeTs)) {
+      expect.fail(`setup outlasted the ${PLANTED_SECS} s of planted update accounts`)
     }
     for (const strike of STRIKES) {
       const market = pda(meridian.programId, [encoder.encode('market'), ticker, day, i64Le(strike)])
@@ -487,7 +553,7 @@ describe('worker settles through a Pyth slot switched by update_config and env v
   it('settles every strike from the planted PriceUpdateV2 account, configured only through env vars', async () => {
     const sink = recordingSink()
     const env: NodeJS.ProcessEnv = {
-      SOLANA_RPC_URL: RPC_URL,
+      SOLANA_RPC_URL: rpcUrl,
       AUTOMATION_KEYPAIR: secretJson(automation),
       RELAY_SIGNER_1_KEYPAIR: secretJson(relay),
       RELAY_1_SOURCE: 'mock',
@@ -508,7 +574,7 @@ describe('worker settles through a Pyth slot switched by update_config and env v
 
     await eventually(
       'the market close on the validator clock',
-      (CLOSE_IN_SECS + 30) * SECOND_MS,
+      (CLOSE_MARGIN_SECS + 60) * SECOND_MS,
       async () => {
         const clock = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY, 'confirmed')
         const chainNow = clock ? Number(clock.data.readBigInt64LE(32)) : 0
