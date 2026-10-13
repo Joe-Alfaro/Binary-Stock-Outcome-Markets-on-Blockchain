@@ -166,3 +166,74 @@ describe('startWorker oracle slot configuration (R32)', () => {
     await expectStartFailure({ ...env, ORACLE_SLOT_2: 'chainlink' }, /CHAINLINK_/)
   })
 })
+
+// The worker's stop() must reach the morning job. Started between 6:00 and 8:00 AM ET on a trading
+// day, the job runs at once, and its retries (here: no reachable RPC, mock source without most
+// recordings) must end on stop() instead of at the 8:00 deadline.
+describe('startWorker stop during the morning window', () => {
+  const key = (keypair = Keypair.generate()) => JSON.stringify([...keypair.secretKey])
+  const env = {
+    [KEY]: key(),
+    RELAY_SIGNER_1_KEYPAIR: key(),
+    // Nothing listens here: every create fails and backs off.
+    SOLANA_RPC_URL: 'http://127.0.0.1:1',
+    RELAY_1_SOURCE: 'mock',
+  }
+  // 6:03 AM EDT on Tuesday 2026-10-13, a trading day.
+  const SIX_OH_THREE = Date.UTC(2026, 9, 13, 10, 3)
+  const MORNING_JOB_LINES = /previous close fetch failed|create_strike_market/
+  const realDelay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  /**
+   * Waits in real time until a line matches `pattern`, then until none is logged for 2.5 s: every
+   * real RPC call to the dead port (about 1.5 s each here) has come back, and each loop is parked
+   * on the fake clock.
+   */
+  async function settledAfter(lines: string[], pattern: RegExp) {
+    for (let waited = 0; !lines.some((line) => pattern.test(line)) && waited < 10_000;) {
+      await realDelay(100)
+      waited += 100
+    }
+    for (let count = -1; lines.length !== count;) {
+      count = lines.length
+      await realDelay(2_500)
+    }
+  }
+
+  it(
+    'resolves done within 1 s of stop() and the morning job sends nothing after',
+    { timeout: 30_000 },
+    async () => {
+      const clock = new FakeClock(SIX_OH_THREE)
+      const lines: string[] = []
+      const worker = startWorker(createHealthState(), env, {
+        clock,
+        log: (line) => lines.push(String(line)),
+        alertSinks: [],
+      })
+      // Start the morning job, then let its failed creates (real RPC calls) come back: it is now
+      // in its create and previous-close backoffs.
+      await clock.advanceBy(0)
+      await settledAfter(lines, /create_strike_market failed/)
+      assert.ok(
+        lines.some((line) => /create_strike_market failed/.test(line)),
+        'the morning job ran and its creates failed',
+      )
+      assert.ok(
+        lines.some((line) => /previous close fetch failed/.test(line)),
+        'the morning job is retrying previous-close fetches',
+      )
+
+      worker.stop()
+      const linesAtStop = lines.length
+      // The fake clock stands still: only the stop can end the job's backoff.
+      const stopped = await Promise.race([
+        worker.done.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_000)),
+      ])
+      const late = lines.slice(linesAtStop).filter((line) => MORNING_JOB_LINES.test(line))
+      assert.equal(stopped, true, 'worker.done resolves within 1 s of stop()')
+      assert.deepEqual(late, [], 'no fetch or create after stop()')
+    },
+  )
+})

@@ -78,8 +78,8 @@ Runner (`~/.gitlab-runner/config.toml` on the maintainer's Mac):
 - CI validator ports: 8899-8900 plus 9600-9650 (and the faucet on 9900); workers must never use
   them. `Anchor.toml` `[test.validator]` pins them and `[test] startup_wait` allows 60 s for a busy
   host; gossip is pinned to 9600 because it otherwise binds 8000, which workers' validators also
-  hold. `scripts/check-validator-ports.sh` runs before `anchor test` and names any process
-  holding them.
+  hold. In CI, `scripts/check-validator-ports.sh` runs before `anchor test` and waits for those
+  ports to be free (checks every 30 s, up to 15 minutes), naming any process holding them.
 
 ## Quality gates
 
@@ -93,6 +93,13 @@ All local gates must pass before pushing. The Husky pre-push hook runs `make gat
 - `cargo clippy -D warnings`
 - every test suite: workspace unit tests (`node:test`), `cargo test` and the Anchor integration
   tests in `tests/` (Mocha on a local `solana-test-validator`)
+
+`make gates` and `make test` run the Anchor tests through `scripts/anchor-test.sh`. When `CI` is
+unset (the pre-push hook, local runs) it never uses CI's ports: it probes for the first free block
+(RPC 8920-8961 with the WebSocket on RPC + 1 and the faucet on RPC + 2; gossip 9010-9254 plus 40
+dynamic ports), swaps those into `Anchor.toml` `[test.validator]` for the run and restores the file
+afterwards. Pin a block with `VALIDATOR_RPC_PORT`, `VALIDATOR_FAUCET_PORT`, `VALIDATOR_GOSSIP_PORT`
+and `VALIDATOR_DYNAMIC_PORT_RANGE`. In CI it keeps the reserved block from `Anchor.toml`.
 
 `make test` runs only the test suites. Add a test with every change; work test-first where
 practical.
