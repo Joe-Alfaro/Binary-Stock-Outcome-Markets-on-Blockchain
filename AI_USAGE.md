@@ -2,6 +2,19 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Lifecycle integration tests and the automation chain client (`feat/lifecycle`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote the R57 lifecycle tests against a local validator
+  (full lifecycle, the four trade paths, multi-user, admin fallback timing, and the morning and
+  settlement jobs on a real chain client). The implementation worker merged demo mode in and,
+  without changing the tests, wrote `createAnchorChainClient`: open markets listed with
+  `getProgramAccounts` and memcmp filters on status, ticker and day, one `create_strike_market`
+  per transaction, `settle_market` with the canonical close record, admin price propose and
+  finalize, and pending-price reads, all at `confirmed` with bounded retries. It also wired the
+  client into the worker entry point with a daily morning-job scheduler and the settlement loop.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Demo mode (`feat/demo-mode`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

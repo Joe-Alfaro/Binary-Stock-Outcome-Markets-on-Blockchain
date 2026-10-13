@@ -5,6 +5,7 @@ import type {
   CreateStrikeMarketParams,
   CreateStrikeMarketResult,
   OpenMarket,
+  OpenMarketFilter,
   OracleSlot,
   OracleSlots,
   PendingAdminPrice,
@@ -134,9 +135,14 @@ export class FakeChainClient implements ChainClient {
     return { ...this.slots }
   }
 
-  async listOpenMarkets(): Promise<OpenMarket[]> {
+  async listOpenMarkets(filter: OpenMarketFilter = {}): Promise<OpenMarket[]> {
     return this.allMarkets()
-      .filter((market) => !market.settlement)
+      .filter(
+        (market) =>
+          !market.settlement &&
+          (filter.ticker === undefined || market.ticker === filter.ticker) &&
+          (filter.tradingDay === undefined || market.tradingDay === filter.tradingDay),
+      )
       .map(({ address, ticker, tradingDay, strike, closeTs }) => ({
         address,
         ticker,
