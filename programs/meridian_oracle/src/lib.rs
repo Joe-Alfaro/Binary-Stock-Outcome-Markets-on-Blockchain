@@ -18,13 +18,7 @@ pub const MAX_FUTURE_SECS: i64 = 60;
 /// Capacity of the signer registry.
 pub const MAX_SIGNERS: usize = 8;
 
-// The handlers below are interface stubs for the test-first workflow: the accounts, arguments,
-// state and errors are the contract the tests in `tests/` rely on. Each handler still has to be
-// implemented, including the account constraints (PDA seeds, `init`, owner checks).
-// Argument names are part of the contract too: Anchor names the instruction-data fields after
-// them.
 #[program]
-#[allow(unused_variables)]
 pub mod meridian_oracle {
     use super::*;
 
@@ -37,17 +31,34 @@ pub mod meridian_oracle {
     /// Creates the `SignerRegistry` at `["signers"]` with `admin` as its admin. Only the program's
     /// upgrade authority may call it, so nobody can front-run it after deploy.
     pub fn initialize_registry(ctx: Context<InitializeRegistry>, admin: Pubkey) -> Result<()> {
-        err!(OracleError::NotImplemented)
+        let registry = &mut ctx.accounts.registry;
+        registry.admin = admin;
+        registry.signers = Vec::new();
+        registry.bump = ctx.bumps.registry;
+        Ok(())
     }
 
     /// Admin only. Registers a relay signer.
     pub fn add_signer(ctx: Context<UpdateRegistry>, signer: Pubkey) -> Result<()> {
-        err!(OracleError::NotImplemented)
+        let signers = &mut ctx.accounts.registry.signers;
+        require!(
+            !signers.contains(&signer),
+            OracleError::SignerAlreadyRegistered
+        );
+        require!(signers.len() < MAX_SIGNERS, OracleError::RegistryFull);
+        signers.push(signer);
+        Ok(())
     }
 
     /// Admin only. Deregisters a relay signer; it can no longer publish.
     pub fn remove_signer(ctx: Context<UpdateRegistry>, signer: Pubkey) -> Result<()> {
-        err!(OracleError::NotImplemented)
+        let signers = &mut ctx.accounts.registry.signers;
+        let index = signers
+            .iter()
+            .position(|registered| *registered == signer)
+            .ok_or(OracleError::UnregisteredSigner)?;
+        signers.remove(index);
+        Ok(())
     }
 
     /// Registered signer only. Creates an append-only `PriceUpdate` at
@@ -57,7 +68,13 @@ pub mod meridian_oracle {
         ticker: Ticker,
         input: PriceInput,
     ) -> Result<()> {
-        err!(OracleError::NotImplemented)
+        check_not_in_future(input.publish_time)?;
+        let update = &mut ctx.accounts.price_update;
+        update.signer = ctx.accounts.signer.key();
+        update.ticker = ticker;
+        update.set_input(&input);
+        update.bump = ctx.bumps.price_update;
+        Ok(())
     }
 
     /// Registered signer only. Creates the write-once `CloseRecord` at
@@ -71,7 +88,24 @@ pub mod meridian_oracle {
         trading_day: u32,
         close_ts: i64,
     ) -> Result<()> {
-        err!(OracleError::NotImplemented)
+        let first = ctx.accounts.first_update.input();
+        let second = ctx
+            .accounts
+            .second_update
+            .as_ref()
+            .map(|update| update.input());
+        let shape = close_shape(&first, second.as_ref(), close_ts)?;
+
+        let record = &mut ctx.accounts.close_record;
+        record.signer = ctx.accounts.signer.key();
+        record.ticker = ticker;
+        record.trading_day = trading_day;
+        record.close_ts = close_ts;
+        record.shape = shape;
+        record.first = first;
+        record.second = second;
+        record.bump = ctx.bumps.close_record;
+        Ok(())
     }
 
     /// Registered signer only. Creates or overwrites in place the `LatestPrice` at
@@ -81,7 +115,46 @@ pub mod meridian_oracle {
         ticker: Ticker,
         input: PriceInput,
     ) -> Result<()> {
-        err!(OracleError::NotImplemented)
+        check_not_in_future(input.publish_time)?;
+        let latest = &mut ctx.accounts.latest_price;
+        // A freshly created account is all zeroes, so its signer is the default key.
+        let created = latest.signer == Pubkey::default();
+        require!(
+            created || input.publish_time > latest.publish_time,
+            OracleError::PublishTimeNotIncreasing
+        );
+        latest.signer = ctx.accounts.signer.key();
+        latest.ticker = ticker;
+        latest.set_input(&input);
+        latest.bump = ctx.bumps.latest_price;
+        Ok(())
+    }
+}
+
+fn check_not_in_future(publish_time: i64) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    require!(
+        publish_time <= now.saturating_add(MAX_FUTURE_SECS),
+        OracleError::PublishTimeInFuture
+    );
+    Ok(())
+}
+
+/// Infers the close shape from the updates. A pair must straddle `close_ts` strictly, so an update
+/// at the close itself has to be published as an exact-timestamp close instead.
+fn close_shape(
+    first: &PriceInput,
+    second: Option<&PriceInput>,
+    close_ts: i64,
+) -> Result<CloseShape> {
+    match second {
+        Some(second) if first.publish_time < close_ts && close_ts < second.publish_time => {
+            Ok(CloseShape::Interpolation)
+        }
+        Some(_) => err!(OracleError::InvalidCloseShape),
+        None if first.official_close => Ok(CloseShape::OfficialClose),
+        None if first.publish_time == close_ts => Ok(CloseShape::ExactTimestamp),
+        None => err!(OracleError::InvalidCloseShape),
     }
 }
 
@@ -93,13 +166,21 @@ pub struct InitializeRegistry<'info> {
     /// Must be the program's upgrade authority. Pays for the registry.
     #[account(mut)]
     pub authority: Signer<'info>,
-    /// CHECK: stub; the `SignerRegistry` PDA `["signers"]`.
-    #[account(mut)]
-    pub registry: UncheckedAccount<'info>,
-    /// CHECK: stub; this program's account.
-    pub program: UncheckedAccount<'info>,
-    /// CHECK: stub; this program's program-data account.
-    pub program_data: UncheckedAccount<'info>,
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + SignerRegistry::INIT_SPACE,
+        seeds = [SIGNERS_SEED],
+        bump,
+    )]
+    pub registry: Account<'info, SignerRegistry>,
+    #[account(constraint = program.programdata_address()? == Some(program_data.key()))]
+    pub program: Program<'info, program::MeridianOracle>,
+    #[account(
+        constraint = program_data.upgrade_authority_address == Some(authority.key())
+            @ OracleError::NotUpgradeAuthority,
+    )]
+    pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
 }
 
@@ -107,50 +188,94 @@ pub struct InitializeRegistry<'info> {
 pub struct UpdateRegistry<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
-    /// CHECK: stub; the `SignerRegistry` PDA `["signers"]`.
-    #[account(mut)]
-    pub registry: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        seeds = [SIGNERS_SEED],
+        bump = registry.bump,
+        has_one = admin @ OracleError::Unauthorized,
+    )]
+    pub registry: Account<'info, SignerRegistry>,
 }
 
 #[derive(Accounts)]
+#[instruction(ticker: Ticker, input: PriceInput)]
 pub struct PublishPrice<'info> {
     /// The relay signer. Pays for the record.
     #[account(mut)]
     pub signer: Signer<'info>,
-    /// CHECK: stub; the `SignerRegistry` PDA `["signers"]`.
-    pub registry: UncheckedAccount<'info>,
-    /// CHECK: stub; the `PriceUpdate` PDA.
-    #[account(mut)]
-    pub price_update: UncheckedAccount<'info>,
+    #[account(
+        seeds = [SIGNERS_SEED],
+        bump = registry.bump,
+        constraint = registry.signers.contains(&signer.key()) @ OracleError::UnregisteredSigner,
+    )]
+    pub registry: Account<'info, SignerRegistry>,
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + PriceUpdate::INIT_SPACE,
+        seeds = [PRICE_SEED, signer.key().as_ref(), &ticker, &input.publish_time.to_le_bytes()],
+        bump,
+    )]
+    pub price_update: Account<'info, PriceUpdate>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
+#[instruction(ticker: Ticker, trading_day: u32)]
 pub struct PublishClose<'info> {
     /// The relay signer. Pays for the record.
     #[account(mut)]
     pub signer: Signer<'info>,
-    /// CHECK: stub; the `SignerRegistry` PDA `["signers"]`.
-    pub registry: UncheckedAccount<'info>,
-    /// CHECK: stub; the `CloseRecord` PDA.
-    #[account(mut)]
-    pub close_record: UncheckedAccount<'info>,
-    /// CHECK: stub; a `PriceUpdate` owned by this program, from `signer` and for `ticker`.
-    pub first_update: UncheckedAccount<'info>,
-    /// CHECK: stub; the second `PriceUpdate` of an interpolation pair.
-    pub second_update: Option<UncheckedAccount<'info>>,
+    #[account(
+        seeds = [SIGNERS_SEED],
+        bump = registry.bump,
+        constraint = registry.signers.contains(&signer.key()) @ OracleError::UnregisteredSigner,
+    )]
+    pub registry: Account<'info, SignerRegistry>,
+    /// `init` makes the record write-once: any second call for the same key fails.
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + CloseRecord::INIT_SPACE,
+        seeds = [CLOSE_SEED, signer.key().as_ref(), &ticker, &trading_day.to_le_bytes()],
+        bump,
+    )]
+    pub close_record: Account<'info, CloseRecord>,
+    /// `Account` checks the owner and the `PriceUpdate` discriminator, so only updates this program
+    /// wrote through `publish_price` are accepted.
+    #[account(
+        constraint = first_update.signer == signer.key() && first_update.ticker == ticker
+            @ OracleError::UpdateMismatch,
+    )]
+    pub first_update: Account<'info, PriceUpdate>,
+    /// The second `PriceUpdate` of an interpolation pair.
+    #[account(
+        constraint = second_update.signer == signer.key() && second_update.ticker == ticker
+            @ OracleError::UpdateMismatch,
+    )]
+    pub second_update: Option<Account<'info, PriceUpdate>>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
+#[instruction(ticker: Ticker)]
 pub struct PublishLatest<'info> {
     /// The relay signer. Pays for the account the first time.
     #[account(mut)]
     pub signer: Signer<'info>,
-    /// CHECK: stub; the `SignerRegistry` PDA `["signers"]`.
-    pub registry: UncheckedAccount<'info>,
-    /// CHECK: stub; the `LatestPrice` PDA.
-    #[account(mut)]
-    pub latest_price: UncheckedAccount<'info>,
+    #[account(
+        seeds = [SIGNERS_SEED],
+        bump = registry.bump,
+        constraint = registry.signers.contains(&signer.key()) @ OracleError::UnregisteredSigner,
+    )]
+    pub registry: Account<'info, SignerRegistry>,
+    #[account(
+        init_if_needed,
+        payer = signer,
+        space = 8 + LatestPrice::INIT_SPACE,
+        seeds = [LATEST_SEED, signer.key().as_ref(), &ticker],
+        bump,
+    )]
+    pub latest_price: Account<'info, LatestPrice>,
     pub system_program: Program<'info, System>,
 }

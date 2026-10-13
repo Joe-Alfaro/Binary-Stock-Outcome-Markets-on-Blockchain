@@ -20,7 +20,4 @@ pub enum OracleError {
     UpdateMismatch,
     #[msg("Price updates don't form a valid close shape")]
     InvalidCloseShape,
-    /// Stub marker for the test-first workflow. Remove once every handler is implemented.
-    #[msg("Not implemented")]
-    NotImplemented,
 }

@@ -56,6 +56,28 @@ pub struct PriceUpdate {
     pub bump: u8,
 }
 
+impl PriceUpdate {
+    pub fn input(&self) -> PriceInput {
+        PriceInput {
+            price: self.price,
+            conf: self.conf,
+            expo: self.expo,
+            publish_time: self.publish_time,
+            session: self.session,
+            official_close: self.official_close,
+        }
+    }
+
+    pub(crate) fn set_input(&mut self, input: &PriceInput) {
+        self.price = input.price;
+        self.conf = input.conf;
+        self.expo = input.expo;
+        self.publish_time = input.publish_time;
+        self.session = input.session;
+        self.official_close = input.official_close;
+    }
+}
+
 /// `["close", signer, ticker, trading_day]`. Write-once; the only relay account settlement reads.
 #[account]
 #[derive(InitSpace)]
@@ -86,4 +108,15 @@ pub struct LatestPrice {
     pub session: Session,
     pub official_close: bool,
     pub bump: u8,
+}
+
+impl LatestPrice {
+    pub(crate) fn set_input(&mut self, input: &PriceInput) {
+        self.price = input.price;
+        self.conf = input.conf;
+        self.expo = input.expo;
+        self.publish_time = input.publish_time;
+        self.session = input.session;
+        self.official_close = input.official_close;
+    }
 }

@@ -2,6 +2,16 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Relay oracle program (`feat/oracle`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one test worker and one implementation worker.
+- **What the AI did:** the test worker wrote 41 LiteSVM tests for the signer registry,
+  `publish_price`, `publish_close` and `publish_latest`, plus the interface stubs. The
+  implementation worker wrote the `meridian_oracle` handlers and the account constraints (PDA
+  seeds, `init` for the write-once records, `init_if_needed` for the latest-price account, the
+  upgrade-authority check, the registry checks) without changing the tests.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — Architecture update (`docs/architecture-update`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), running as an implementation worker.
