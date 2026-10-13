@@ -137,8 +137,9 @@ make demo ARGS=--dry-run   # the same steps against a built-in fake chain
 `make demo` runs one full market lifecycle in a few minutes instead of waiting for a real 4:00 PM
 close:
 
-1. Creates an AAPL market whose close is 90 seconds away, with the strike one dollar over a
-   recorded real close, so the replayed close settles No.
+1. Creates an AAPL market whose close is 90 seconds away. The relay replays the recorded AAPL close
+   of 2026-10-12, $340.97, re-stamped to the demo close, and the strike is one dollar over it
+   ($341.97), so the replayed close settles No.
 2. Funds two fresh wallets, a trader and a counterparty, and the counterparty mints 10 Yes + No
    pairs.
 3. Runs the four trade paths. Before each one the counterparty quotes it, then the trader takes the
@@ -150,7 +151,10 @@ close:
 
 It prints every transaction's signature, explorer link and confirmation time, and the settlement
 delay measured from the close. The demo refuses any cluster other than localnet or devnet. Demo
-markets are flagged on-chain, and the relay logs the replayed price as replayed.
+markets are flagged on-chain, and the relay logs the replayed price as replayed. The 2026-10-12
+close was transcribed from one live chart API response (`origin: recorded-transcribed` in
+`packages/price-providers/fixtures/provenance.json`); the worker in demo mode replays the same close
+for AAPL and the hand-written fixtures for MSFT.
 
 Known gaps: the demo has not been run end to end on devnet. `tests/demo.test.ts` runs it on a local
 validator and checks every path's fill from the confirmed transactions.
@@ -370,12 +374,14 @@ markets use custom times; otherwise the program enforces the regular schedule). 
 unwinds and redeems through the SDK builders. The worker runs the morning job scheduler, the
 settlement loop, the slot-1 relay (close records once a market's `close_ts` passes, and latest
 prices every 30 s in the session) and a per-minute collateral and supply audit that alerts
-`invariant_failure`. It ships both IDLs in `services/automation/idl` (`make ship-idls`), so a
+`invariant_failure`. Each oracle slot settles through the provider its env names
+(`ORACLE_SLOT_1` and `ORACLE_SLOT_2`: the relay, Pyth through the receiver program, or Data Streams
+through the verifier), with no code change to switch. It ships both IDLs in `services/automation/idl` (`make ship-idls`), so a
 deploy starts without `target/`. Lifecycle integration tests on a local validator cover create,
 mint, the four trade paths, the relay close, settlement, the admin fallback, redeem and both jobs
 against the real chain client; a validator test measures rent and compute and checks that a vault
-donation can't change payouts. `make dev` runs the whole stack on its own ports, `make demo` fills
-all four trade paths, and `make e2e` drives the web app in a browser. Close out orders and redeem
+donation can't change payouts. `make dev` runs the whole stack on its own ports, `make demo` replays the recorded AAPL close of
+2026-10-12 and fills all four trade paths, and `make e2e` drives the web app in a browser. Close out orders and redeem
 is one transaction unless the wallet has more resting orders than fit in one; then the wallet
 approves each transaction in order.
 
@@ -390,9 +396,10 @@ Not finished yet:
   markets for good. Slot 2 is disabled, so there's no second source to cross-check, and if Yahoo is
   down at the close nothing settles until the admin fallback at +15 and +60 minutes.
 - **Unofficial price API.** The Yahoo chart API is undocumented and can change, rate-limit or
-  disappear without notice. It answered 429 to every attempt to record real responses, so the price
-  fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than captured,
-  and marked `hand-written` in `fixtures/provenance.json`. Run `npm run record-fixtures` in
+  disappear without notice. It answered 429 to every scripted attempt to record real responses, so
+  the price fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than
+  captured, and marked `hand-written` in `fixtures/provenance.json`. The one exception is the AAPL
+  close of 2026-10-12 the demo replays, whose values were transcribed from a single live response. Run `npm run record-fixtures` in
   `packages/price-providers` to replace them with real captures when the API answers.
   Its terms don't clearly allow republishing prices; that is acceptable for a devnet project with no
   real money, but any use beyond devnet needs a licensed data source. It may also block cloud IP

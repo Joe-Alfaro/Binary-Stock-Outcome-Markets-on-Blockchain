@@ -1,0 +1,32 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "symbol": "AAPL",
+          "exchangeTimezoneName": "America/New_York",
+          "regularMarketPrice": 340.97,
+          "regularMarketTime": 1791835201,
+          "chartPreviousClose": 336.64,
+          "previousClose": 336.64,
+          "currentTradingPeriod": {
+            "regular": {
+              "start": 1791811800,
+              "end": 1791835200,
+              "gmtoffset": -14400
+            }
+          }
+        },
+        "timestamp": [1791835080, 1791835140, 1791835200],
+        "indicators": {
+          "quote": [
+            {
+              "close": [341.010009765625, 341.05999755859375, 340.9700012207031]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}
