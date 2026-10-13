@@ -96,7 +96,7 @@ function i64Le(value: bigint | number) {
   return bytes
 }
 
-function pda(programId: PublicKey, seeds: Uint8Array[]) {
+export function pda(programId: PublicKey, seeds: Uint8Array[]) {
   return PublicKey.findProgramAddressSync(seeds, programId)[0]
 }
 
@@ -129,7 +129,7 @@ function priceInput(update: NormalizedPrice) {
   }
 }
 
-function associatedTokenAddress(owner: PublicKey, mint: PublicKey) {
+export function associatedTokenAddress(owner: PublicKey, mint: PublicKey) {
   return pda(ASSOCIATED_TOKEN_PROGRAM_ID, [
     owner.toBytes(),
     TOKEN_PROGRAM_ID.toBytes(),
@@ -137,7 +137,7 @@ function associatedTokenAddress(owner: PublicKey, mint: PublicKey) {
   ])
 }
 
-function createAtaIdempotent(payer: PublicKey, owner: PublicKey, mint: PublicKey) {
+export function createAtaIdempotent(payer: PublicKey, owner: PublicKey, mint: PublicKey) {
   return new TransactionInstruction({
     programId: ASSOCIATED_TOKEN_PROGRAM_ID,
     keys: [
@@ -166,7 +166,7 @@ function initializeMint2(mint: PublicKey, decimals: number, authority: PublicKey
 }
 
 /** SPL Token `MintTo` (opcode 7) or `Transfer` (opcode 3): both take an amount after the opcode. */
-function tokenAmountInstruction(
+export function tokenAmountInstruction(
   opcode: 3 | 7,
   from: PublicKey,
   to: PublicKey,

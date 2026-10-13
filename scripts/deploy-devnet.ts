@@ -9,7 +9,7 @@ export interface CommandRunner {
   run(
     command: string,
     args: string[],
-    options?: { env?: Record<string, string>; background?: boolean },
+    options?: { env?: Record<string, string>; background?: boolean; cwd?: string },
   ): Promise<{ stdout: string }>
 }
 

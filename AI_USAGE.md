@@ -67,6 +67,19 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   polite re-record script with offline tests); the JSON fixtures stay marked hand-written.
 - **Human review:** pending MR review.
 
+## 2026-10-13 — make e2e and the E2E test wallet (`feat/e2e`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote the Playwright specs (axe on Trade and Portfolio, a
+  maker's order in the book within 2 s, a UI Buy Yes with one signature) and the node tests for
+  the harness plan and the test wallet. The implementation worker wrote `scripts/e2e.ts`
+  without changing the tests: a private validator with both programs at genesis, a deploy check,
+  bootstrap with a mock USDC mint and demo mode, one demo market with a funded maker and trader,
+  then `next dev` on port 3105 and Playwright, with background processes always stopped. It also
+  added the flag-gated "E2E test wallet" adapter that signs through a Playwright bridge, and a
+  production-build check that fails if that wallet is ever bundled.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Lifecycle integration tests and the automation chain client (`feat/lifecycle`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

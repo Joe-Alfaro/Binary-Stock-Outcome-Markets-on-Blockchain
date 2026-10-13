@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 TSX := npx tsx
 
-.PHONY: install build test check-sizes gates dev deploy-devnet demo ship-idls
+.PHONY: install build test check-sizes gates dev deploy-devnet demo ship-idls e2e
 
 install:
 	npm install
@@ -47,3 +47,9 @@ demo:
 # Copies the built IDLs into the automation service, which ships them for deploys (no target/).
 ship-idls: build
 	@$(TSX) scripts/ship-idls.ts
+
+# Playwright specs (R22, R56) on a private stack: validator on E2E_RPC_PORT (default 8975),
+# programs at genesis, bootstrap with a mock USDC mint and demo mode, one demo market, then
+# `next dev` on E2E_WEB_PORT (default 3105) with the test wallet. Local only, not in the MR pipeline.
+e2e:
+	@$(TSX) scripts/e2e.ts $(ARGS)
