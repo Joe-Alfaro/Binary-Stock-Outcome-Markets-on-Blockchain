@@ -14,12 +14,12 @@ install:
 build:
 	anchor build
 
-# Runs every suite: workspace unit tests, Rust unit tests and Anchor integration tests.
+# Runs every suite: workspace unit tests, Rust unit tests and Anchor integration tests. Outside CI
+# the Anchor validator runs on a free private port block (scripts/anchor-test.sh).
 test: build
 	$(NPM_TEST)
 	cargo test --workspace
-	./scripts/check-validator-ports.sh
-	anchor test --skip-build --validator legacy
+	./scripts/anchor-test.sh
 
 check-sizes:
 	./scripts/check-file-sizes.sh
@@ -33,8 +33,7 @@ gates: check-sizes build
 	cargo clippy --workspace --all-targets -- -D warnings
 	$(NPM_TEST)
 	cargo test --workspace
-	./scripts/check-validator-ports.sh
-	anchor test --skip-build --validator legacy
+	./scripts/anchor-test.sh
 
 # Local validator (LOCAL_VALIDATOR_RPC_PORT), deploy, bootstrap with a mock USDC mint, sample
 # markets, then the worker and the web app. Pass ARGS=--dry-run to print the plan.
