@@ -89,6 +89,14 @@ pub mod meridian {
         instructions::settlement::handle_settle_market(ctx, slot)
     }
 
+    pub fn settle_market_with_reports(
+        ctx: Context<SettleMarketWithReports>,
+        slot: u8,
+        reports: Vec<Vec<u8>>,
+    ) -> Result<()> {
+        instructions::settlement::handle_settle_market_with_reports(ctx, slot, reports)
+    }
+
     pub fn propose_admin_price(
         ctx: Context<ProposeAdminPrice>,
         ticker: [u8; 8],

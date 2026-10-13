@@ -5,10 +5,12 @@
 
 pub mod admin;
 pub mod redeem;
+pub mod reports;
 pub mod settle;
 
 pub use admin::*;
 pub use redeem::*;
+pub use reports::*;
 pub use settle::*;
 
 /// Exponent of an admin-entered price: whole cents, the same scale as the strikes.
