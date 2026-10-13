@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Core program (`feat/core`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 47 red LiteSVM tests and the account and state
+  stubs for config, pause, market creation, `add_strike`, `mint_pair` and `merge_pair`. The
+  implementation worker wrote the handlers to pass them without changing the tests: the
+  upgrade-authority check, admin-only config updates, one-strike market creation with a shared
+  `TickerDay`, and mint and merge backed by a collateral counter. It also added the
+  `PairMinted` and `PairMerged` events, reserved space in `Market` for settlement fields and a
+  program README.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Price providers (`feat/providers`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

@@ -51,25 +51,76 @@ pub struct InitializeConfig<'info> {
 #[derive(Accounts)]
 pub struct AdminConfig<'info> {
     pub admin: Signer<'info>,
-    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
+    #[account(
+        mut,
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        has_one = admin @ MeridianError::Unauthorized,
+    )]
     pub config: Account<'info, Config>,
 }
 
 pub fn handle_initialize_config(
-    _ctx: Context<InitializeConfig>,
-    _args: InitializeConfigArgs,
+    ctx: Context<InitializeConfig>,
+    args: InitializeConfigArgs,
 ) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+    // The program-data account must be this program's, and its upgrade authority the signer.
+    let program_data = &ctx.accounts.program_data;
+    require!(
+        ctx.accounts.program.programdata_address()? == Some(program_data.key()),
+        MeridianError::Unauthorized
+    );
+    require!(
+        program_data.upgrade_authority_address == Some(ctx.accounts.authority.key()),
+        MeridianError::Unauthorized
+    );
+
+    ctx.accounts.config.set_inner(Config {
+        admin: args.admin,
+        automation_authority: args.automation_authority,
+        usdc_mint: ctx.accounts.usdc_mint.key(),
+        tickers: args.tickers,
+        oracle_slots: args.oracle_slots,
+        max_staleness_secs: args.max_staleness_secs,
+        max_conf_bps: args.max_conf_bps,
+        admin_propose_delay_secs: args.admin_propose_delay_secs,
+        admin_finalize_delay_secs: args.admin_finalize_delay_secs,
+        paused: false,
+        demo_mode: false,
+        bump: ctx.bumps.config,
+    });
+    Ok(())
 }
 
-pub fn handle_update_config(_ctx: Context<AdminConfig>, _args: UpdateConfigArgs) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+pub fn handle_update_config(ctx: Context<AdminConfig>, args: UpdateConfigArgs) -> Result<()> {
+    let config = &mut ctx.accounts.config;
+    if let Some(v) = args.automation_authority {
+        config.automation_authority = v;
+    }
+    if let Some(v) = args.oracle_slots {
+        config.oracle_slots = v;
+    }
+    if let Some(v) = args.max_staleness_secs {
+        config.max_staleness_secs = v;
+    }
+    if let Some(v) = args.max_conf_bps {
+        config.max_conf_bps = v;
+    }
+    if let Some(v) = args.admin_propose_delay_secs {
+        config.admin_propose_delay_secs = v;
+    }
+    if let Some(v) = args.admin_finalize_delay_secs {
+        config.admin_finalize_delay_secs = v;
+    }
+    Ok(())
 }
 
-pub fn handle_pause(_ctx: Context<AdminConfig>) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+pub fn handle_pause(ctx: Context<AdminConfig>) -> Result<()> {
+    ctx.accounts.config.paused = true;
+    Ok(())
 }
 
-pub fn handle_unpause(_ctx: Context<AdminConfig>) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+pub fn handle_unpause(ctx: Context<AdminConfig>) -> Result<()> {
+    ctx.accounts.config.paused = false;
+    Ok(())
 }

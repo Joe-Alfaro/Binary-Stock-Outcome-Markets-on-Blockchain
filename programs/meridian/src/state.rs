@@ -127,6 +127,40 @@ pub struct Market {
     pub demo: bool,
     pub created_at: i64,
     pub bump: u8,
+    /// Zeroed space for the settlement package (pending admin price and time, and the like), so
+    /// its fields fit in markets created before that upgrade.
+    pub _reserved: [u8; MARKET_RESERVED],
+}
+
+pub const MARKET_RESERVED: usize = 64;
+
+/// Owned signer seeds for a `Market` PDA, which signs as mint authority and vault owner.
+pub struct MarketSeeds {
+    ticker: Ticker,
+    trading_day: [u8; 4],
+    strike: [u8; 8],
+    bump: [u8; 1],
+}
+
+impl MarketSeeds {
+    pub fn as_slices(&self) -> [&[u8]; 5] {
+        [
+            MARKET_SEED,
+            &self.ticker,
+            &self.trading_day,
+            &self.strike,
+            &self.bump,
+        ]
+    }
+}
+
+pub fn market_seeds(market: &Market) -> MarketSeeds {
+    MarketSeeds {
+        ticker: market.ticker,
+        trading_day: market.trading_day.to_le_bytes(),
+        strike: market.strike.to_le_bytes(),
+        bump: [market.bump],
+    }
 }
 
 /// Order book for one market. The order-book package adds the bid/ask arrays and seats after
