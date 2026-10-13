@@ -46,6 +46,20 @@ export function ensureProgramKeypairs(dirs: ProgramKeyDirs = DEFAULT_DIRS): Prog
   return ids
 }
 
+/** The IDs of the keypairs `ensureProgramKeypairs` stored, without generating any. */
+export function readProgramIds(dirs: ProgramKeyDirs = DEFAULT_DIRS): ProgramIds {
+  const ids = {} as ProgramIds
+  PROGRAMS.forEach(({ id, name }) => {
+    const stored = join(dirs.keysDir, `${name}-keypair.json`)
+    try {
+      ids[id] = loadKeypair(stored).publicKey
+    } catch (error) {
+      throw new Error(`${stored}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  })
+  return ids
+}
+
 async function main() {
   const ids = ensureProgramKeypairs()
   console.log(`Program IDs: meridian ${ids.meridian}, meridian_oracle ${ids.meridianOracle}`)
