@@ -314,6 +314,27 @@ class SolanaChainClient implements ChainClient {
     return Number(await this.tokenBalance(ata(new PublicKey(owner), mint)))
   }
 
+  subscribeUsdcBalance(owner: string, onChange: () => void): Unsubscribe {
+    let unsubscribe: Unsubscribe | null = null
+    let stopped = false
+    this.usdcMint()
+      .then((mint) => {
+        if (stopped) return
+        // The caller polls as well, so a failed subscription needs no handling here.
+        unsubscribe = watchAccount(
+          this.connection,
+          ata(new PublicKey(owner), mint),
+          onChange,
+          () => {},
+        )
+      })
+      .catch(() => {})
+    return () => {
+      stopped = true
+      unsubscribe?.()
+    }
+  }
+
   /** Base-unit balances of one owner in one market: wallet Yes and No, plus book escrow. */
   private async balances(owner: PublicKey, marketAddress: PublicKey) {
     const market = await this.marketAccount(marketAddress)

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { LatestPrice, Ticker, UnsignedTx } from './chain'
 import { toChainError, tradeErrorMessage } from './chain'
-import { useServices } from './services'
+import { useServices, useTxConfirmations } from './services'
 
 /** The connected wallet's public key, or `null`. Re-renders on connect and disconnect. */
 export function useWalletKey(): string | null {
@@ -13,6 +13,46 @@ export function useWalletKey(): string | null {
     () => wallet.getPublicKey(),
     () => null,
   )
+}
+
+/** How often the USDC balance is re-read in case the account subscription misses a change. */
+export const BALANCE_POLL_MS = 15_000
+
+/**
+ * The wallet's USDC balance in base units, or `null` while loading. Re-read at `confirmed` after
+ * every confirmed transaction from `useTransaction`, whenever the token-account subscription
+ * reports a change, and every `BALANCE_POLL_MS` as a fallback.
+ */
+export function useUsdcBalance(owner: string | null): number | null {
+  const { chain } = useServices()
+  const confirmations = useTxConfirmations()
+  const [balance, setBalance] = useState<number | null>(null)
+  useEffect(() => {
+    setBalance(null)
+    if (!owner) return
+    let active = true
+    let latest = 0
+    const refresh = () => {
+      const request = ++latest
+      chain
+        .getUsdcBalance(owner)
+        .then((value) => {
+          if (active && request === latest) setBalance(value)
+        })
+        .catch(() => {})
+    }
+    refresh()
+    const unsubscribeAccount = chain.subscribeUsdcBalance?.(owner, refresh)
+    const unsubscribeConfirmations = confirmations.subscribe(refresh)
+    const poll = setInterval(refresh, BALANCE_POLL_MS)
+    return () => {
+      active = false
+      clearInterval(poll)
+      unsubscribeConfirmations()
+      unsubscribeAccount?.()
+    }
+  }, [chain, confirmations, owner])
+  return balance
 }
 
 /** `services.now()`, refreshed every `intervalMs`. */
@@ -103,6 +143,7 @@ export type TxState =
  */
 export function useTransaction() {
   const { chain, wallet } = useServices()
+  const confirmations = useTxConfirmations()
   const [tx, setTx] = useState<TxState>({ phase: 'idle' })
 
   const run = useCallback(
@@ -118,6 +159,7 @@ export function useTransaction() {
           const signed = await wallet.signTransaction(unsigned)
           setTx({ phase: 'confirming', label: step })
           signature = (await chain.sendAndConfirm(signed, 'confirmed')).signature
+          confirmations.notify()
         }
         setTx({ phase: 'confirmed', label, signature })
         return true
@@ -126,7 +168,7 @@ export function useTransaction() {
         return false
       }
     },
-    [chain, wallet],
+    [chain, confirmations, wallet],
   )
 
   const reset = useCallback(() => setTx({ phase: 'idle' }), [])

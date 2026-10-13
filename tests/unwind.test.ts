@@ -14,7 +14,7 @@ import {
   buildCancelOrder,
   buildCloseOutPosition,
 } from '@meridian/sdk'
-import type { CloseOutContext, RestingOrder } from '@meridian/sdk'
+import type { CloseOutContext } from '@meridian/sdk'
 import type { Keypair, PublicKey } from '@solana/web3.js'
 import { expect } from 'chai'
 import {
@@ -30,51 +30,12 @@ import {
   freshWallet,
   sendSdkTransaction,
   tradeContext,
+  walletBook,
 } from './support/meridian.js'
 import type { TestMarket } from './support/meridian.js'
 
 const usdc = (dollars: number) => BigInt(Math.round(dollars * 1_000_000))
 const tokens = (n: number) => BigInt(n) * UNIT
-
-/** Zero-copy `OrderBook` layout (`state/orderbook.rs`), the same offsets the app decodes. */
-const BOOK_SIDE_CAPACITY = 32
-const SEAT_CAPACITY = 32
-const ORDER_SIZE = 24
-const SEAT_SIZE = 48
-const BIDS_OFFSET = 8 + 32 * 3 + 8 + 8
-const ASKS_OFFSET = BIDS_OFFSET + BOOK_SIDE_CAPACITY * ORDER_SIZE
-const SEATS_OFFSET = ASKS_OFFSET + BOOK_SIDE_CAPACITY * ORDER_SIZE
-
-/** The wallet's resting orders and seat, read from the book account. */
-async function walletBook(owner: PublicKey, market: TestMarket) {
-  const info = await connection.getAccountInfo(market.accounts.book, 'confirmed')
-  if (!info) throw new Error('no book account')
-  const data = Buffer.from(info.data)
-  const seatIndex = Array.from({ length: SEAT_CAPACITY }, (_, i) => i).find((i) =>
-    data
-      .subarray(SEATS_OFFSET + i * SEAT_SIZE, SEATS_OFFSET + i * SEAT_SIZE + 32)
-      .equals(owner.toBuffer()),
-  )
-  if (seatIndex === undefined) return { restingOrders: [] as RestingOrder[], seat: null }
-  const seatAt = SEATS_OFFSET + seatIndex * SEAT_SIZE
-  const side = (offset: number, name: RestingOrder['side']) =>
-    Array.from({ length: BOOK_SIDE_CAPACITY }, (_, i) => offset + i * ORDER_SIZE)
-      .map((at) => ({
-        orderId: data.readBigUInt64LE(at),
-        qty: Number(data.readBigUInt64LE(at + 8)),
-        priceCents: data.readUInt8(at + 16),
-        seat: data.readUInt8(at + 17),
-      }))
-      .filter((o) => o.qty > 0 && o.seat === seatIndex)
-      .map(({ orderId, qty, priceCents }) => ({ orderId, side: name, priceCents, qty }))
-  return {
-    restingOrders: [...side(BIDS_OFFSET, 'Bid'), ...side(ASKS_OFFSET, 'Ask')],
-    seat: {
-      freeYesBaseUnits: data.readBigUInt64LE(seatAt + 32),
-      freeUsdcBaseUnits: data.readBigUInt64LE(seatAt + 40),
-    },
-  }
-}
 
 /** What the unwind builders need, from the wallet's live balances and book seat. */
 async function unwindContext(owner: PublicKey, market: TestMarket): Promise<CloseOutContext> {

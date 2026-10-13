@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — Close-out-and-redeem on a real chain and in the browser (`feat/closeout-chain`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker added `tests/closeout.test.ts` (close-out-and-redeem on the
+  shared validator, one-transaction and split cases), a settled demo market in the e2e stack and
+  the R52 Portfolio browser spec. The implementation worker, without changing those tests, made
+  the header USDC balance follow the chain: `useUsdcBalance` re-reads it at `confirmed` after
+  every transaction `useTransaction` confirms (trade, cancel, close-out, redeem), on an account
+  subscription to the wallet's USDC token account, and every 15 s as a fallback. Added unit
+  tests for the refresh and the subscription; `make e2e` passed 5/5 twice.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — The demo replays the recorded AAPL close of 2026-10-12 (`feat/real-close`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

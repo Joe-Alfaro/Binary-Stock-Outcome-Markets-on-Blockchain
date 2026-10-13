@@ -111,6 +111,11 @@ export interface ChainClient {
     onError: (error: unknown) => void,
   ): Unsubscribe
   getUsdcBalance(owner: string): Promise<number>
+  /**
+   * Account subscription on the wallet's USDC token account at `confirmed`; `onChange` fires when
+   * it changes. Optional: callers poll `getUsdcBalance` as well, so a client without it still works.
+   */
+  subscribeUsdcBalance?(owner: string, onChange: () => void): Unsubscribe
   /** Yes and No for one strike, wallet balance plus anything escrowed in the book. */
   getHoldings(owner: string, market: string): Promise<Holdings>
   /** Decoded program events that involve `owner`, in chain order, plus `MarketSettled` events. */
