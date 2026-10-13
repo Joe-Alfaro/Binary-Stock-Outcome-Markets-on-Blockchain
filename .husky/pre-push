@@ -1,0 +1,4 @@
+# Toolchain locations used by the Anza installer and Homebrew rustup, for shells that lack them.
+export PATH="$HOME/.local/share/solana/install/active_release/bin:/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
+
+make gates

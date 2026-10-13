@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "mocha"]
+  },
+  "include": ["tests/**/*.ts", "scripts/**/*.ts", "eslint.config.mjs"]
+}

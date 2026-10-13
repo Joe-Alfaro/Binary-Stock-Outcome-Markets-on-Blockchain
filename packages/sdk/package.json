@@ -1,0 +1,14 @@
+{
+  "name": "@meridian/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TS client, transaction builders and shared math",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
+  }
+}
