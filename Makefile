@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 TSX := npx tsx
 
-.PHONY: install build test gates dev deploy-devnet demo
+.PHONY: install build test check-sizes gates dev deploy-devnet demo
 
 install:
 	npm install
@@ -15,8 +15,11 @@ test: build
 	cargo test --workspace
 	anchor test --skip-build --validator legacy
 
-# Every local quality gate. The pre-push hook runs this.
-gates: build
+check-sizes:
+	./scripts/check-file-sizes.sh
+
+# Every local quality gate. The pre-push hook and the MR pipeline run this.
+gates: check-sizes build
 	npm run format:check
 	npm run lint
 	npm run typecheck

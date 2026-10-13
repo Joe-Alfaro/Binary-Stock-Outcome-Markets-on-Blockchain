@@ -10,5 +10,7 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   `services/automation`, `app`), the Anchor workspace (`programs/meridian`,
   `programs/meridian_oracle`) with placeholder `ping` instructions, Mocha integration tests,
   smoke tests per workspace, the Makefile, Prettier, ESLint, TypeScript and Rust lint settings,
-  the Husky pre-push hook, `.env.example`, `AGENTS.md` and this log.
+  the Husky pre-push hook, `.env.example`, `AGENTS.md` and this log. Added `.gitlab-ci.yml`
+  running the same gates, registered a project shell runner and turned on "Pipelines must
+  succeed".
 - **Human review:** pending MR review.
