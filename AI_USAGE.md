@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Relay publisher (`feat/relay`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 37 red `node:test` tests for the relay close
+  sequence, live prices and the demo replay, with a fake oracle, source and clock. The
+  implementation worker wrote the publisher without changing those tests: close records after
+  `close_ts` (official close first, the interpolation pair from +180 s, 30 s polling, crash
+  recovery), the calendar-gated live-price loop with backoff, demo labeling, and an Anchor-backed
+  `OracleClient` for `meridian_oracle`. It also added `latest()` to the Yahoo and mock sources,
+  writing its own tests for that method and for the client's PDA and argument encoding.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Price providers (`feat/providers`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
