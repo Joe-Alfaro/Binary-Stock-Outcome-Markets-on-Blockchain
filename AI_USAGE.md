@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Order book (`feat/orderbook`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 31 red LiteSVM tests and the zero-copy book, seat,
+  order and event stubs for `place_order`, `cancel_order` and `settle_funds`. The implementation
+  worker wrote the matching engine to pass them without changing the tests: escrow on placement,
+  price-time priority at the maker's price, limit, market and post-only orders, self-trade
+  cancels, the 16-match cap, seat claiming and release, owner-only cancel, withdrawals signed by
+  the book and one `OrderFilled` event per fill through `emit_cpi!`. It added unit tests for a
+  limit order stopped by the fill cap. The maximum sweep uses about 80k compute units.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Core program (`feat/core`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

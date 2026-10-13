@@ -1,9 +1,10 @@
 //! `place_order`, `cancel_order` and `settle_funds` (ARCHITECTURE.md §3.3, §3.7).
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::errors::MeridianError;
+use crate::events::OrderFilled;
 use crate::state::*;
 
 /// Escrows `price × qty` USDC (bid) or `qty` Yes (ask) from the owner's wallet into the book's
@@ -59,19 +60,104 @@ pub struct SettleFunds<'info> {
 }
 
 pub fn handle_place_order(
-    _ctx: Context<PlaceOrder>,
-    _side: Side,
-    _kind: OrderKind,
-    _price: u8,
-    _qty: u64,
+    ctx: Context<PlaceOrder>,
+    side: Side,
+    kind: OrderKind,
+    price: u8,
+    qty: u64,
 ) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+    let now = Clock::get()?.unix_timestamp;
+    let market = &ctx.accounts.market;
+    require!(!ctx.accounts.config.paused, MeridianError::Paused);
+    require!(now >= market.trading_open_ts, MeridianError::TradingNotOpen);
+    require!(now < market.close_ts, MeridianError::MarketClosed);
+    require!(
+        market.status == MarketStatus::Open,
+        MeridianError::MarketSettled
+    );
+    require!(
+        (MIN_PRICE..=MAX_PRICE).contains(&price),
+        MeridianError::InvalidPrice
+    );
+    require!(qty > 0, MeridianError::ZeroAmount);
+
+    let accounts = &ctx.accounts;
+    let (from, to, amount) = match side {
+        Side::Bid => (
+            &accounts.user_usdc,
+            &accounts.usdc_escrow,
+            usdc_amount(price, qty)?,
+        ),
+        Side::Ask => (&accounts.user_yes, &accounts.yes_escrow, yes_units(qty)?),
+    };
+    token::transfer(
+        CpiContext::new(
+            accounts.token_program.key(),
+            Transfer {
+                from: from.to_account_info(),
+                to: to.to_account_info(),
+                authority: accounts.owner.to_account_info(),
+            },
+        ),
+        amount,
+    )?;
+
+    let taker = accounts.owner.key();
+    let fills = accounts
+        .book
+        .load_mut()?
+        .place(taker, side, kind, price, qty)?;
+    let market = accounts.market.key();
+    for fill in fills {
+        emit_cpi!(OrderFilled {
+            market,
+            maker: fill.maker,
+            taker,
+            maker_order_id: fill.maker_order_id,
+            taker_side: side,
+            price: fill.price,
+            qty: fill.qty,
+            ts: now,
+        });
+    }
+    Ok(())
 }
 
-pub fn handle_cancel_order(_ctx: Context<CancelOrder>, _order_id: u64) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+pub fn handle_cancel_order(ctx: Context<CancelOrder>, order_id: u64) -> Result<()> {
+    ctx.accounts
+        .book
+        .load_mut()?
+        .cancel(&ctx.accounts.owner.key(), order_id)
 }
 
-pub fn handle_settle_funds(_ctx: Context<SettleFunds>) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+pub fn handle_settle_funds(ctx: Context<SettleFunds>) -> Result<()> {
+    let accounts = &ctx.accounts;
+    // The book signs the transfers below, so its data must not stay borrowed during the CPIs.
+    let ((yes, usdc), bump) = {
+        let mut book = accounts.book.load_mut()?;
+        (book.withdraw(&accounts.owner.key())?, book.bump)
+    };
+    let market = accounts.market.key();
+    let seeds: &[&[u8]] = &[BOOK_SEED, market.as_ref(), &[bump]];
+    for (from, to, amount) in [
+        (&accounts.yes_escrow, &accounts.user_yes, yes),
+        (&accounts.usdc_escrow, &accounts.user_usdc, usdc),
+    ] {
+        if amount == 0 {
+            continue;
+        }
+        token::transfer(
+            CpiContext::new_with_signer(
+                accounts.token_program.key(),
+                Transfer {
+                    from: from.to_account_info(),
+                    to: to.to_account_info(),
+                    authority: accounts.book.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+        )?;
+    }
+    Ok(())
 }
