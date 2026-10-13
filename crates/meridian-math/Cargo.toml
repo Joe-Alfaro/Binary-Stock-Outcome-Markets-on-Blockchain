@@ -1,0 +1,14 @@
+[package]
+name = "meridian-math"
+version = "0.1.0"
+description = "Closing-price rule, payout rule and strike math shared by the programs"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+num-bigint = "0.4"
+num-rational = "0.4"
+proptest = "1"
+serde_json = "1"

@@ -1,0 +1,55 @@
+{
+  "description": "Strike ladders: round_to_10(prev × (1 ± p)) for p in {3%, 6%, 9%} plus round_to_10(prev), deduplicated, ascending, halves up. prevClose is price × 10^expo; strikes are whole dollars.",
+  "cases": [
+    {
+      "name": "prev 680",
+      "prevClose": { "price": 68000, "expo": -2 },
+      "strikes": [620, 640, 660, 680, 700, 720, 740]
+    },
+    {
+      "name": "prev 230 dedups to five strikes",
+      "prevClose": { "price": 23000, "expo": -2 },
+      "strikes": [210, 220, 230, 240, 250]
+    },
+    {
+      "name": "prev 226.48",
+      "prevClose": { "price": 22648, "expo": -2 },
+      "strikes": [210, 220, 230, 240, 250]
+    },
+    {
+      "name": "prev 685.00 rounds the half up to 690",
+      "prevClose": { "price": 68500, "expo": -2 },
+      "strikes": [620, 640, 660, 690, 710, 730, 750]
+    },
+    {
+      "name": "prev 684.99 rounds down to 680",
+      "prevClose": { "price": 68499, "expo": -2 },
+      "strikes": [620, 640, 660, 680, 710, 730, 750]
+    },
+    {
+      "name": "prev 17250: 17250 × 0.94 is exactly 16215, which binary floats round to 16210",
+      "prevClose": { "price": 1725000, "expo": -2 },
+      "strikes": [15700, 16220, 16730, 17250, 17770, 18290, 18800]
+    },
+    {
+      "name": "prev 226.48 at expo -8",
+      "prevClose": { "price": 22648000000, "expo": -8 },
+      "strikes": [210, 220, 230, 240, 250]
+    },
+    {
+      "name": "prev 680 at expo 0",
+      "prevClose": { "price": 680, "expo": 0 },
+      "strikes": [620, 640, 660, 680, 700, 720, 740]
+    },
+    {
+      "name": "prev 100 dedups to three strikes",
+      "prevClose": { "price": 100, "expo": 0 },
+      "strikes": [90, 100, 110]
+    },
+    {
+      "name": "prev 50 dedups to one strike",
+      "prevClose": { "price": 5000, "expo": -2 },
+      "strikes": [50]
+    }
+  ]
+}
