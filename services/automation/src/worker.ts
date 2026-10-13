@@ -5,7 +5,7 @@ import type { Idl } from '@anchor-lang/core'
 import { createRelaySource } from '@meridian/price-providers'
 import { assertNotMainnet } from '@meridian/sdk'
 import { Connection, Keypair, PublicKey } from '@solana/web3.js'
-import { createAlerter, sinksFromEnv, type LineWriter } from './alerts/index.js'
+import { createAlerter, sinksFromEnv, type AlertSink, type LineWriter } from './alerts/index.js'
 import {
   DEFAULT_IDL_PATH,
   createAnchorChainClient,
@@ -123,6 +123,16 @@ export function withScanHealth(chain: ChainClient, health: HealthState, clock: C
   }
 }
 
+/** Injected by tests; production uses the defaults. */
+export interface WorkerDeps {
+  /** Drives every job and the relay. Defaults to the system clock. */
+  clock?: Clock
+  /** Receives every JSON log line, from the jobs and the relay. Defaults to `console.log`. */
+  log?: LineWriter
+  /** Alert sinks. Defaults to `sinksFromEnv(env)`. */
+  alertSinks?: AlertSink[]
+}
+
 export interface Worker {
   /** Resolves once both jobs have stopped. */
   done: Promise<void>
@@ -133,7 +143,11 @@ export interface Worker {
  * Starts the morning job scheduler and the settlement loop against the cluster in `env`, signed
  * by the automation authority.
  */
-export function startWorker(health: HealthState, env: NodeJS.ProcessEnv = process.env): Worker {
+export function startWorker(
+  health: HealthState,
+  env: NodeJS.ProcessEnv = process.env,
+  deps: WorkerDeps = {},
+): Worker {
   const settings = loadChainSettings(env)
   const idl: Idl = loadMeridianIdl(settings.idlPath)
   const chain = createAnchorChainClient({
@@ -144,9 +158,9 @@ export function startWorker(health: HealthState, env: NodeJS.ProcessEnv = proces
       ? new PublicKey(settings.oracleProgramId)
       : loadOracleProgramId(oracleIdlPath(settings.idlPath)),
   })
-  const clock = systemClock
-  const log = createJobLogger(console.log, clock)
-  const alerter = createAlerter({ sinks: sinksFromEnv(env) })
+  const clock = deps.clock ?? systemClock
+  const log = createJobLogger(deps.log ?? console.log, clock)
+  const alerter = createAlerter({ sinks: deps.alertSinks ?? sinksFromEnv(env) })
   const controller = new AbortController()
   const shared = { chain: withScanHealth(chain, health, clock), alerter, clock, log }
   const done = Promise.all([

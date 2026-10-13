@@ -26,6 +26,7 @@ import {
   tradingDayString,
   u32Le,
 } from './codec.js'
+import type { MarketCollateral } from '../invariants.js'
 import { errorText, withRetry, type RetryPolicy } from './retry.js'
 import type {
   ChainClient,
@@ -101,6 +102,8 @@ export interface AnchorChainClient extends ChainClient {
   readonly oracleProgramId: PublicKey
   /** Sends `propose_admin_price`; the price must be whole cents. Needs the `admin` option. */
   proposeAdminPrice(ticker: string, tradingDay: string, price: ChainPrice): Promise<void>
+  /** Every market's collateral counters, vault balance and outcome-mint supplies (R46 audit). */
+  listMarketCollateral(): Promise<MarketCollateral[]>
 }
 
 type Bn = InstanceType<typeof BN>
@@ -357,6 +360,10 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
           .signers([admin])
           .rpc(),
       )
+    },
+
+    async listMarketCollateral() {
+      throw new Error('listMarketCollateral is not implemented')
     },
   }
 }
