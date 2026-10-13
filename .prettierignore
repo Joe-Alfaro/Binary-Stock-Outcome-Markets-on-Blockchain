@@ -9,3 +9,5 @@ package-lock.json
 ARCHITECTURE.md
 .npm/
 services/automation/idl/
+# Recorded API responses stay byte for byte; provenance.json pins their SHA-256.
+packages/price-providers/fixtures/yahoo/

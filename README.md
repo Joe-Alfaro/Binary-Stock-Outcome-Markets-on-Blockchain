@@ -93,8 +93,10 @@ solana airdrop 2 <PUBKEY> --url devnet
 ```
 
 The airdrop is rate-limited. If it fails, wait and retry, or use the web faucet at
-`https://faucet.solana.com`. Each trading day's markets cost about 2 SOL in rent, which isn't
-reclaimed, so only run the morning job on devnet when you need it.
+`https://faucet.solana.com`. Measured rent is 0.035 SOL per market (the market, both mints, the
+vault, the book and the two escrows) and 1.74 SOL per trading day (49 markets across the seven
+tickers plus their `TickerDay` accounts). It isn't reclaimed, so only run the morning job on devnet
+when you need it.
 
 **USDC.** On devnet the bootstrap uses Circle's devnet USDC mint
 (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`) unless `USDC_MINT` is set. Fund a wallet from
@@ -165,7 +167,7 @@ cheap blocks.
 - **HyperLiquid:** has a fast native order book, but it may not support custom instruments like a
   new contract per strike per day.
 
-Solana's main costs here are account rent (each market and book is an account, about 2 SOL per
+Solana's main costs here are account rent (each market and book is an account, 1.74 SOL per
 trading day on devnet) and a 1,232-byte transaction size limit, which the four trade-path
 transactions fit within.
 
@@ -250,6 +252,28 @@ it to merge exactly the Yes their own transaction added, because the fill size i
 transaction is built. Mint, merge and redeem are the only instructions that create or burn Yes and
 No, and the vault's collateral counter always covers every outstanding pair.
 
+## Vault donations and direct burns
+
+Two things can happen to a market's tokens that Meridian doesn't control, and neither breaks it.
+
+**USDC donated to a vault.** Anyone can send USDC straight to a market's vault with the token
+program. The program never reads the vault balance: mint, merge and redeem use the market's
+internal `collateral` counter, which only mint adds to. A donation is never paid out. Merge still
+pays exactly $1.00 a pair, winners still redeem exactly $1.00 a token, and the donated USDC stays in
+the vault after the last redemption. The validator test `tests/measurements.test.ts` donates 5 USDC
+and then mints, merges, trades, settles and redeems in one scenario with exact payouts.
+
+**Yes or No burned directly.** A holder can burn their own Yes or No with the token program,
+outside Meridian. The market keeps working: mint, merge, settlement and redeem are unaffected, and
+the counter still covers every token left. The $1.00 behind each burned token simply stays in the
+vault, unpaid.
+
+## Adjusting strikes
+
+The admin adjusts a day's strike ladder only by adding strikes with `add_strike`, which is allowed
+until the close. No instruction changes an existing market's strike, so a strike someone already
+trades against never moves.
+
 ## Dependencies
 
 Every direct dependency in the npm and Cargo manifests, with the reason it's there.
@@ -327,8 +351,7 @@ wallet approves each transaction in order.
 
 Not finished yet:
 
-- The admin CLI (config updates, propose and finalize admin price, pause) and the rent measurement
-  script.
+- The admin CLI (config updates, propose and finalize admin price, pause).
 - On-chain Pyth and Chainlink adapters (see [Price oracle](#price-oracle)).
 - A devnet run of `make demo`, and the first Railway deploy.
 
@@ -339,7 +362,9 @@ Not finished yet:
   down at the close nothing settles until the admin fallback at +15 and +60 minutes.
 - **Unofficial price API.** The Yahoo chart API is undocumented and can change, rate-limit or
   disappear without notice. It answered 429 to every attempt to record real responses, so the price
-  fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than captured.
+  fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than captured,
+  and marked `hand-written` in `fixtures/provenance.json`. Run `npm run record-fixtures` in
+  `packages/price-providers` to replace them with real captures when the API answers.
   Its terms don't clearly allow republishing prices; that is acceptable for a devnet project with no
   real money, but any use beyond devnet needs a licensed data source. It may also block cloud IP
   ranges, which would stop live prices on a hosted worker.
@@ -348,8 +373,10 @@ Not finished yet:
   covers that.
 - **Order book capacity.** Each book holds 32 orders per side and 32 trader seats. A busy strike
   can fill up; seats are released by `settle_funds`. A large order against a deep book can stop at
-  the 16-fill cap and need a second transaction.
-- **Devnet costs and limits.** Rent is about 2 SOL per trading day and isn't reclaimed. Devnet
+  the 16-fill cap and need a second transaction. A market order sweeping all 16 fills from 16
+  makers used about 140,000 compute units on the local validator (136,033 and 139,033 in two runs) (87,811 for the instruction alone in
+  LiteSVM), well under the 1.4M per-transaction limit.
+- **Devnet costs and limits.** Rent is 1.74 SOL per trading day and isn't reclaimed. Devnet
   faucets and public RPCs are rate-limited; set `SOLANA_RPC_URL` to a dedicated RPC if needed.
 - **Alerts go only to logs and an optional webhook.** Nobody is paged unless a webhook is
   configured and watched.
