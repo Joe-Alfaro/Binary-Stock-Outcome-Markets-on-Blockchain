@@ -14,6 +14,17 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   program README.
 - **Human review:** pending MR review.
 
+## 2026-10-12 — SDK trading logic (`feat/sdk-logic`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the implementation worker of a TDD pair.
+- **What the AI did:** implemented `packages/sdk/src/trading` against the test worker's red tests:
+  the No view of the Yes book and executable quotes (R29), the Yes/No position constraint with a
+  typed error that still allows cancel and close-out (R28), payoff copy and an ET countdown that
+  handles early closes (R51), and an integer-cents P&L replay over program events. In that replay a
+  No bought through mint-and-sell has its cost net of the mint, maker fills count, and a
+  market-maker exposure view is built from the same replay (R52). Removed the stub lint
+  suppressions and logged its implementation choices in the local decisions log.
+
 ## 2026-10-12 — Price providers (`feat/providers`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
