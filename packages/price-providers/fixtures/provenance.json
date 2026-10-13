@@ -11,6 +11,13 @@
     "sha256": "fd88a2a9f14dfc2b7d474ae4e64c6b903cfc5f9644bcf4fd0efb1812c5dcc8e2",
     "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
   },
+  "yahoo/AAPL-2026-10-12-close.json": {
+    "origin": "recorded-transcribed",
+    "url": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1m&range=1d",
+    "capturedAt": "2026-10-13T00:20:00Z",
+    "sha256": "65bf35a8f3521f3703eca50e41eee6012ad5b212417ed2d68fdcc3a99510eb44",
+    "note": "The official AAPL close of 2026-10-12 and the last three one-minute closes, transcribed from one live response read with a browser User-Agent at about 19:20 CDT. The response bytes were not saved, so there is no checksum of them; sha256 covers this file. Fields that were not transcribed are left out."
+  },
   "yahoo/MSFT-2026-10-09-1m.json": {
     "origin": "hand-written",
     "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/MSFT?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",

@@ -420,3 +420,25 @@ describe('createDemoClient trade paths (R61)', () => {
     })
   })
 })
+
+// R44: the demo replays the recorded AAPL close of 2026-10-12 ($340.97), not a hand-written one.
+describe('the demo replays a recorded real close (R44)', () => {
+  it('prints the recorded close it replays and the strike one dollar over it', async () => {
+    const fake = fakeDemo()
+    await runDemo({ env: { SOLANA_CLUSTER: 'devnet' }, ...fake.options })
+    const output = fake.lines.join('\n')
+    assert.match(output, /recorded AAPL close of 2026-10-12/)
+    assert.match(output, /\$340\.97\b/)
+    assert.match(output, /strike \$341\.97\b/i)
+  })
+
+  it('has the chain demo client replay the recorded close, not the hand-written mock fixtures', () => {
+    const source = readFileSync(join(REPO_ROOT, 'scripts/lib/chain.ts'), 'utf8')
+    assert.doesNotMatch(source, /\bcreateMockSource\b/, 'chain.ts still replays the mock fixtures')
+    assert.match(
+      source,
+      /\bcreateDemoReplaySource\(/,
+      'chain.ts never builds the demo replay source',
+    )
+  })
+})

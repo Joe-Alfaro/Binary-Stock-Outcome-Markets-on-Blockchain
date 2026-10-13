@@ -5,7 +5,7 @@
  */
 import anchor from '@anchor-lang/core'
 import type { Idl, Program as AnchorProgram } from '@anchor-lang/core'
-import { createMockSource, type NormalizedPrice } from '@meridian/price-providers'
+import { createDemoReplaySource, type NormalizedPrice } from '@meridian/price-providers'
 import {
   buildBuyNoTransaction,
   buildBuyYesTransaction,
@@ -27,7 +27,13 @@ import {
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import type { BootstrapClient, ConfigParams, OracleSlotParams } from '../bootstrap.js'
-import { QUOTE_PRICES, type Commitment, type DemoClient, type WalletBalances } from '../demo.js'
+import {
+  QUOTE_PRICES,
+  strikeOver,
+  type Commitment,
+  type DemoClient,
+  type WalletBalances,
+} from '../demo.js'
 import { resolveCluster, type ClusterTarget } from '../guard.js'
 import { loadKeypair, loadRoleKeys, type LoadedKey } from './keys.js'
 
@@ -427,7 +433,7 @@ export function createBootstrapClient(env: NodeJS.ProcessEnv): BootstrapClient {
  */
 export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
   const chain = createChain(env)
-  const source = createMockSource()
+  const source = createDemoReplaySource()
   const markets = new Map<string, DemoMarket>()
   const trader = Keypair.generate()
   const counterparty = Keypair.generate()
@@ -551,10 +557,10 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
       .instruction()
   }
 
-  const recordedClose = async (ticker: string, closeTs: number) => {
+  const replayedClose = async (ticker: string, closeTs: number) => {
     const inputs = await source.prepareClose(ticker, closeTs)
     if (!inputs || inputs.updates.length === 0) {
-      throw new Error(`The mock source has no recorded close for ${ticker}`)
+      throw new Error(`The demo replay source has no close for ${ticker}`)
     }
     return inputs.updates
   }
@@ -575,11 +581,9 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
         await chain.sendAndConfirm([demoMode], [admin])
       }
 
-      // Strike one dollar over the recorded close, so the replayed close settles No and the No
-      // the trader keeps pays out.
-      const [first] = await recordedClose(ticker, closeTs)
+      const [first] = await replayedClose(ticker, closeTs)
       const expo = first?.expo ?? 0
-      const strike = (first?.price ?? 0n) + 10n ** BigInt(-expo)
+      const strike = strikeOver(first?.price ?? 0n, expo)
       const tradingDay = tradingDayOf(closeTs)
       const market = pda(meridian.programId, [
         encoder.encode('market'),
@@ -691,9 +695,9 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
       const [relay] = chain.keys().relaySigners
       if (!relay) throw new Error('RELAY_SIGNER_1_KEYPAIR is not set')
       const oracle = chain.program('meridian_oracle')
-      const updates = await recordedClose(info.ticker, info.closeTs)
+      const updates = await replayedClose(info.ticker, info.closeTs)
       console.log(
-        `Relay: replayed recorded close for ${info.ticker}, re-stamped to close_ts ${info.closeTs}`,
+        `Relay: replayed close for ${info.ticker}, re-stamped to close_ts ${info.closeTs}`,
       )
 
       // The program rejects prices published in the future.
