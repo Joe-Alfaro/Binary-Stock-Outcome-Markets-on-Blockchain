@@ -13,6 +13,7 @@ build:
 test: build
 	npm test
 	cargo test --workspace
+	./scripts/check-validator-ports.sh
 	anchor test --skip-build --validator legacy
 
 check-sizes:
@@ -27,6 +28,7 @@ gates: check-sizes build
 	cargo clippy --workspace --all-targets -- -D warnings
 	npm test
 	cargo test --workspace
+	./scripts/check-validator-ports.sh
 	anchor test --skip-build --validator legacy
 
 # Local validator (LOCAL_VALIDATOR_RPC_PORT), deploy, bootstrap with a mock USDC mint, sample

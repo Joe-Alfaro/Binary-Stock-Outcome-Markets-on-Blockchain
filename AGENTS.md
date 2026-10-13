@@ -75,6 +75,11 @@ Runner (`~/.gitlab-runner/config.toml` on the maintainer's Mac):
 - Global `concurrent = 1` and `check_interval = 30`.
 - The project runner `local-mac-shell` has `limit = 1` and `output_limit = 4096`.
 - Leave every other `[[runners]]` block alone. They belong to the maintainer.
+- CI validator ports: 8899-8900 plus 9600-9650 (and the faucet on 9900); workers must never use
+  them. `Anchor.toml` `[test.validator]` pins them and `[test] startup_wait` allows 60 s for a busy
+  host; gossip is pinned to 9600 because it otherwise binds 8000, which workers' validators also
+  hold. `scripts/check-validator-ports.sh` runs before `anchor test` and names any process
+  holding them.
 
 ## Quality gates
 

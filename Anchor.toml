@@ -21,3 +21,15 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "npx mocha --node-option import=tsx --timeout 1000000 'tests/**/*.test.ts'"
+
+# CI's validator gets its own ports so it never clashes with workers' local validators on the
+# shared runner host, and a longer startup wait for when that host is busy. See AGENTS.md.
+[test]
+startup_wait = 60000
+
+[test.validator]
+rpc_port = 8899
+faucet_port = 9900
+# Without gossip_port the validator binds gossip to 8000, outside dynamic_port_range.
+gossip_port = 9600
+dynamic_port_range = "9601-9650"
