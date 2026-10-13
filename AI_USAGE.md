@@ -59,6 +59,18 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   cases in Rust, 2,000 seeded cases in TS). Tests were not changed by the implementation.
 - **Human review:** pending MR review.
 
+## 2026-10-12 — Relay publisher (`feat/relay`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 37 red `node:test` tests for the relay close
+  sequence, live prices and the demo replay, with a fake oracle, source and clock. The
+  implementation worker wrote the publisher without changing those tests: close records after
+  `close_ts` (official close first, the interpolation pair from +180 s, 30 s polling, crash
+  recovery), the calendar-gated live-price loop with backoff, demo labeling, and an Anchor-backed
+  `OracleClient` for `meridian_oracle`. It also added `latest()` to the Yahoo and mock sources,
+  writing its own tests for that method and for the client's PDA and argument encoding.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Price providers (`feat/providers`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
@@ -68,28 +80,6 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   without changing the tests, and added tests for the 429 fallback from query1 to query2 and
   the backoff across calls. Yahoo answered 429 to every capture attempt, so the fixtures are
   still hand-written.
-- **Human review:** pending MR review.
-
-## 2026-10-12 — Trading calendar and alert sinks (`feat/calendar-alerts`)
-
-- **Tool:** Claude Code (Claude Opus 5.5), as a test worker and a separate implementation worker.
-- **What the AI did:** the test worker wrote red `node:test` suites for the NYSE calendar (holidays,
-  early closes, DST, previous trading day, input validation) and the alert sinks, with interface
-  stubs. The implementation worker filled in `services/automation/src/calendar` (checked-in 2026
-  and 2027 holiday and early-close data, `America/New_York` session times) and
-  `services/automation/src/alerts` (log sink, JSON webhook sink with a timeout, env-based sink
-  selection, an alerter that contains sink failures) without changing the tests.
-- **Human review:** pending MR review.
-
-## 2026-10-13 — Settlement math (`feat/math`)
-
-- **Tool:** Claude Code (Claude Opus 5.5), as a TDD pair: one session wrote the red tests and
-  shared fixtures, a second implemented them.
-- **What the AI did:** implemented the closing-price rule (validation, official close, exact
-  timestamp and exact-rational interpolation), the payout rule and the strike ladder in the
-  `no_std` crate `crates/meridian-math`, and the bigint TypeScript twin in
-  `packages/sdk/src/math`. Both pass the shared fixtures and the property tests (10,000 proptest
-  cases in Rust, 2,000 seeded cases in TS). Tests were not changed by the implementation.
 - **Human review:** pending MR review.
 
 ## 2026-10-12 — Relay oracle program (`feat/oracle`)

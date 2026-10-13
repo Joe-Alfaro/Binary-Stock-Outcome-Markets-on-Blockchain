@@ -47,3 +47,10 @@ export interface PriceProvider {
    */
   previousClose(ticker: string, previousTradingDay: string): Promise<PreviousClose>
 }
+
+/** A source of the current regular-session price, for the display-only latest-price accounts. */
+export interface LivePriceProvider {
+  readonly name: string
+  /** The latest regular-session price, or null when the source has none for today's session. */
+  latest(ticker: string): Promise<NormalizedPrice | null>
+}

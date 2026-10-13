@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { PriceSourceError } from './errors.js'
 import { REGULAR_CLOSE_SECS, newYorkMidnight } from './time.js'
-import type { PriceProvider } from './types.js'
-import { closeInputs, completedDailyCloses, parseChart } from './yahoo.js'
+import type { LivePriceProvider, PriceProvider } from './types.js'
+import { closeInputs, completedDailyCloses, parseChart, toNormalized } from './yahoo.js'
 import type { YahooChart } from './yahoo.js'
 
 const FIXTURES = new URL('../fixtures/yahoo/', import.meta.url)
@@ -29,12 +29,20 @@ function recording(ticker: string, interval: '1m' | '1d'): { chart: YahooChart; 
   return { chart: parseChart(body, ticker), day: pattern.exec(name)?.[1] as string }
 }
 
+export interface MockSourceOptions {
+  /** Current Unix time in seconds, used to stamp live prices. Injected for tests. */
+  now?: () => number
+}
+
 /**
  * Offline relay source that replays the recorded Yahoo fixtures in `fixtures/yahoo/`, re-stamped
  * to the requested `closeTs`. Never touches the network. It answers as if the close has already
- * passed, so callers decide when to ask.
+ * passed, and as if the session is open for live prices, so callers decide when to ask.
  */
-export function createMockSource(): PriceProvider {
+export function createMockSource(
+  options: MockSourceOptions = {},
+): PriceProvider & LivePriceProvider {
+  const now = options.now ?? (() => Math.floor(Date.now() / 1000))
   return {
     name: 'mock',
 
@@ -63,6 +71,12 @@ export function createMockSource(): PriceProvider {
         throw new PriceSourceError('not-found', `mock source has no daily close for ${ticker}`)
       }
       return { ticker, price: latest.price, tradingDay: previousTradingDay }
+    },
+
+    /** The recording's last regular-session price, re-stamped to now. */
+    async latest(ticker) {
+      const { chart } = recording(ticker, '1m')
+      return toNormalized(ticker, chart.regularMarketPrice, 0, now(), false)
     },
   }
 }
