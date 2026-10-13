@@ -36,11 +36,15 @@ export function spawnRunner(): CommandRunner & { stopAll(): void } {
     run(command, args, options = {}) {
       const env = { ...process.env, ...options.env }
       if (options.background) {
-        background.push(spawn(command, args, { env, stdio: 'inherit' }))
+        background.push(spawn(command, args, { env, cwd: options.cwd, stdio: 'inherit' }))
         return Promise.resolve({ stdout: '' })
       }
       return new Promise((resolve, reject) => {
-        const child = spawn(command, args, { env, stdio: ['inherit', 'pipe', 'inherit'] })
+        const child = spawn(command, args, {
+          env,
+          cwd: options.cwd,
+          stdio: ['inherit', 'pipe', 'inherit'],
+        })
         let stdout = ''
         child.stdout.on('data', (chunk: Buffer) => {
           stdout += chunk.toString()
