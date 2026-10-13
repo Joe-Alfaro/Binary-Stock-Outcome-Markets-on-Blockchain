@@ -7,6 +7,14 @@ import anchor from '@anchor-lang/core'
 import type { Idl, Program as AnchorProgram } from '@anchor-lang/core'
 import { createMockSource, type NormalizedPrice } from '@meridian/price-providers'
 import {
+  buildBuyNoTransaction,
+  buildBuyYesTransaction,
+  buildSellNoTransaction,
+  buildSellYesTransaction,
+  type MarketAccounts,
+  type TradeContext,
+} from '@meridian/sdk'
+import {
   Connection,
   Keypair,
   LAMPORTS_PER_SOL,
@@ -14,11 +22,12 @@ import {
   SystemProgram,
   Transaction,
   TransactionInstruction,
+  type VersionedTransaction,
 } from '@solana/web3.js'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import type { BootstrapClient, ConfigParams, OracleSlotParams } from '../bootstrap.js'
-import type { Commitment, DemoClient, TradePath } from '../demo.js'
+import { QUOTE_PRICES, type Commitment, type DemoClient, type WalletBalances } from '../demo.js'
 import { resolveCluster, type ClusterTarget } from '../guard.js'
 import { loadKeypair, loadRoleKeys, type LoadedKey } from './keys.js'
 
@@ -33,15 +42,12 @@ const TICKER_LEN = 8
 const TICKER_COUNT = 7
 /** USDC base units per pair (6 decimals). */
 const UNIT = 1_000_000
-/** Order prices in cents. Bids sit below asks, so the demo's single trader never self-matches. */
-const ORDER_PRICES: Record<TradePath, number> = {
-  'buy-yes': 45,
-  'sell-yes': 55,
-  'buy-no': 60,
-  'sell-no': 40,
-}
+/** A token account's amount: a u64 after its mint and owner. */
+const TOKEN_AMOUNT_OFFSET = 64
 const LOCALNET_AIRDROP_SOL = 10
-const TRADER_SOL = 0.2
+const WALLET_SOL = 0.2
+/** Each demo wallet gets this many pairs' worth of USDC per pair the counterparty mints. */
+const USDC_PER_PAIR = 2
 
 const encoder = new TextEncoder()
 
@@ -59,6 +65,8 @@ interface DemoMarket {
   noMint: PublicKey
   vault: PublicKey
   book: PublicKey
+  yesEscrow: PublicKey
+  usdcEscrow: PublicKey
 }
 
 function loadIdl(name: string): Idl {
@@ -232,8 +240,9 @@ function createChain(env: NodeJS.ProcessEnv) {
     return build(...args)
   }
 
-  const hasInstruction = (name: 'meridian' | 'meridian_oracle', snake: string) =>
-    program(name).idl.instructions.some((ix) => ix.name === snake)
+  /** `Program` camel-cases the IDL's instruction names. */
+  const hasInstruction = (name: 'meridian' | 'meridian_oracle', instruction: string) =>
+    program(name).idl.instructions.some((ix) => ix.name === instruction)
 
   const programData = (programId: PublicKey) =>
     pda(BPF_LOADER_UPGRADEABLE_ID, [programId.toBytes()])
@@ -244,6 +253,19 @@ function createChain(env: NodeJS.ProcessEnv) {
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
     const tx = new Transaction({ feePayer: feePayer.publicKey, blockhash, lastValidBlockHeight })
     tx.add(...instructions).sign(...signers)
+    const signature = await connection.sendRawTransaction(tx.serialize())
+    pending.set(signature, { blockhash, lastValidBlockHeight })
+    return signature
+  }
+
+  /** Signs and sends a transaction an SDK builder compiled. */
+  async function sendVersioned(
+    build: (blockhash: string) => VersionedTransaction,
+    signer: Keypair,
+  ) {
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+    const tx = build(blockhash)
+    tx.sign([signer])
     const signature = await connection.sendRawTransaction(tx.serialize())
     pending.set(signature, { blockhash, lastValidBlockHeight })
     return signature
@@ -301,6 +323,7 @@ function createChain(env: NodeJS.ProcessEnv) {
     hasInstruction,
     programData,
     send,
+    sendVersioned,
     confirm,
     sendAndConfirm,
     fundOnLocalnet,
@@ -398,16 +421,17 @@ export function createBootstrapClient(env: NodeJS.ProcessEnv): BootstrapClient {
 }
 
 /**
- * The demo client. The admin turns on demo mode and creates the market, a fresh trader mints and
- * places the four trade paths as resting limit orders, relay signer 1 publishes the replayed
- * recorded close, and the automation key settles.
+ * The demo client. The admin creates the market; a funded counterparty mints pairs and quotes
+ * each trade path; a fresh trader takes each quote with the SDK builder the web app uses; relay
+ * signer 1 publishes the replayed recorded close, and the automation key settles.
  */
 export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
   const chain = createChain(env)
   const source = createMockSource()
   const markets = new Map<string, DemoMarket>()
   const trader = Keypair.generate()
-  let traderFunded = false
+  const counterparty = Keypair.generate()
+  let walletsFunded = false
 
   const marketInfo = (market: string) => {
     const info = markets.get(market)
@@ -415,85 +439,110 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
     return info
   }
 
-  const traderAccounts = async (info: DemoMarket) => {
+  const walletAccounts = async (info: DemoMarket, owner: PublicKey) => {
     const usdcMint = await chain.configUsdcMint()
     return {
       usdcMint,
-      userUsdc: associatedTokenAddress(trader.publicKey, usdcMint),
-      userYes: associatedTokenAddress(trader.publicKey, info.yesMint),
-      userNo: associatedTokenAddress(trader.publicKey, info.noMint),
+      userUsdc: associatedTokenAddress(owner, usdcMint),
+      userYes: associatedTokenAddress(owner, info.yesMint),
+      userNo: associatedTokenAddress(owner, info.noMint),
     }
   }
 
-  /** SOL for fees, token accounts and enough USDC for the pairs the demo mints. */
-  async function fundTrader(info: DemoMarket, usdcAmount: bigint) {
-    if (traderFunded) return
+  /** SOL for fees, and token accounts and `usdcAmount` USDC, for both demo wallets. */
+  async function fundWallets(info: DemoMarket, usdcAmount: bigint) {
+    if (walletsFunded) return
     const { admin } = chain.keys()
-    const { usdcMint, userUsdc } = await traderAccounts(info)
+    const usdcMint = await chain.configUsdcMint()
     const mintInfo = await chain.connection.getAccountInfo(usdcMint)
     // A mint's authority is a COption<Pubkey> at the start of its data.
     const adminIsMintAuthority =
       mintInfo !== null &&
       mintInfo.data.readUInt32LE(0) === 1 &&
       new PublicKey(mintInfo.data.subarray(4, 36)).equals(admin.publicKey)
-    const fundUsdc = adminIsMintAuthority
-      ? tokenAmountInstruction(7, usdcMint, userUsdc, admin.publicKey, usdcAmount)
-      : tokenAmountInstruction(
-          3,
-          associatedTokenAddress(admin.publicKey, usdcMint),
-          userUsdc,
-          admin.publicKey,
-          usdcAmount,
-        )
+    const fundUsdc = (owner: PublicKey) =>
+      adminIsMintAuthority
+        ? tokenAmountInstruction(
+            7,
+            usdcMint,
+            associatedTokenAddress(owner, usdcMint),
+            admin.publicKey,
+            usdcAmount,
+          )
+        : tokenAmountInstruction(
+            3,
+            associatedTokenAddress(admin.publicKey, usdcMint),
+            associatedTokenAddress(owner, usdcMint),
+            admin.publicKey,
+            usdcAmount,
+          )
+    const fund = (owner: PublicKey) => [
+      SystemProgram.transfer({
+        fromPubkey: admin.publicKey,
+        toPubkey: owner,
+        lamports: WALLET_SOL * LAMPORTS_PER_SOL,
+      }),
+      createAtaIdempotent(admin.publicKey, owner, usdcMint),
+      createAtaIdempotent(admin.publicKey, owner, info.yesMint),
+      createAtaIdempotent(admin.publicKey, owner, info.noMint),
+      fundUsdc(owner),
+    ]
     await chain.sendAndConfirm(
-      [
-        SystemProgram.transfer({
-          fromPubkey: admin.publicKey,
-          toPubkey: trader.publicKey,
-          lamports: TRADER_SOL * LAMPORTS_PER_SOL,
-        }),
-        createAtaIdempotent(admin.publicKey, trader.publicKey, usdcMint),
-        createAtaIdempotent(admin.publicKey, trader.publicKey, info.yesMint),
-        createAtaIdempotent(admin.publicKey, trader.publicKey, info.noMint),
-        fundUsdc,
-      ],
+      [...fund(trader.publicKey), ...fund(counterparty.publicKey)],
       [admin],
     )
-    traderFunded = true
+    walletsFunded = true
   }
 
-  const collateralIx = async (
-    instruction: 'mintPair' | 'mergePair',
-    info: DemoMarket,
-    quantity: number,
-  ) => {
-    const { userUsdc, userYes, userNo } = await traderAccounts(info)
-    return chain
-      .method('meridian', instruction, new BN(quantity))
-      .accountsPartial({
-        user: trader.publicKey,
-        market: info.market,
-        yesMint: info.yesMint,
-        noMint: info.noMint,
-        vault: info.vault,
-        userUsdc,
-        userYes,
-        userNo,
-      })
-      .instruction()
+  /** A wallet's USDC, Yes and No in base units; a missing token account holds nothing. */
+  async function walletBalances(info: DemoMarket, owner: PublicKey): Promise<WalletBalances> {
+    const { userUsdc, userYes, userNo } = await walletAccounts(info, owner)
+    const accounts = await chain.connection.getMultipleAccountsInfo([userUsdc, userYes, userNo])
+    const [usdc, yes, no] = accounts.map((account) =>
+      account ? account.data.readBigUInt64LE(TOKEN_AMOUNT_OFFSET) : 0n,
+    ) as [bigint, bigint, bigint]
+    return { usdc, yes, no }
+  }
+
+  const marketAccounts = async (info: DemoMarket): Promise<MarketAccounts> => ({
+    programId: chain.program('meridian').programId,
+    config: pda(chain.program('meridian').programId, [encoder.encode('config')]),
+    market: info.market,
+    usdcMint: await chain.configUsdcMint(),
+    yesMint: info.yesMint,
+    noMint: info.noMint,
+    vault: info.vault,
+    book: info.book,
+    yesEscrow: info.yesEscrow,
+    usdcEscrow: info.usdcEscrow,
+  })
+
+  /** What the SDK builders need for the trader, read just before the trade, as the app does. */
+  async function traderContext(info: DemoMarket) {
+    const held = await walletBalances(info, trader.publicKey)
+    const market = await marketAccounts(info)
+    return (recentBlockhash: string): TradeContext => ({
+      owner: trader.publicKey,
+      market,
+      // The trader never leaves an order resting, so its wallet is all it holds.
+      holdings: { yes: Number(held.yes / BigInt(UNIT)), no: Number(held.no / BigInt(UNIT)) },
+      walletYesBaseUnits: held.yes,
+      recentBlockhash,
+    })
   }
 
   const placeOrderIx = async (
     info: DemoMarket,
+    owner: Keypair,
     side: 'bid' | 'ask',
     price: number,
     quantity: number,
   ) => {
-    const { userUsdc, userYes } = await traderAccounts(info)
+    const { userUsdc, userYes } = await walletAccounts(info, owner.publicKey)
     return chain
       .method('meridian', 'placeOrder', { [side]: {} }, { limit: {} }, price, new BN(quantity))
       .accountsPartial({
-        owner: trader.publicKey,
+        owner: owner.publicKey,
         market: info.market,
         book: info.book,
         userUsdc,
@@ -518,7 +567,7 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
       await chain.fundOnLocalnet()
       const { admin } = chain.keys()
       const meridian = chain.program('meridian')
-      if (chain.hasInstruction('meridian', 'set_demo_mode')) {
+      if (chain.hasInstruction('meridian', 'setDemoMode')) {
         const demoMode = await chain
           .method('meridian', 'setDemoMode', true)
           .accountsPartial({ admin: admin.publicKey })
@@ -526,10 +575,11 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
         await chain.sendAndConfirm([demoMode], [admin])
       }
 
-      // Strike one dollar under the recorded close, so the replayed close settles Yes.
+      // Strike one dollar over the recorded close, so the replayed close settles No and the No
+      // the trader keeps pays out.
       const [first] = await recordedClose(ticker, closeTs)
       const expo = first?.expo ?? 0
-      const strike = (first?.price ?? 0n) - 10n ** BigInt(-expo)
+      const strike = (first?.price ?? 0n) + 10n ** BigInt(-expo)
       const tradingDay = tradingDayOf(closeTs)
       const market = pda(meridian.programId, [
         encoder.encode('market'),
@@ -564,43 +614,76 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
         noMint: pda(meridian.programId, [encoder.encode('no'), market.toBytes()]),
         vault: pda(meridian.programId, [encoder.encode('vault'), market.toBytes()]),
         book: pda(meridian.programId, [encoder.encode('book'), market.toBytes()]),
+        yesEscrow: pda(meridian.programId, [encoder.encode('yes_escrow'), market.toBytes()]),
+        usdcEscrow: pda(meridian.programId, [encoder.encode('usdc_escrow'), market.toBytes()]),
       })
       return { market: market.toBase58(), signature }
     },
 
     async mintPair(market, quantity) {
       const info = marketInfo(market)
-      // Twice the pairs minted here: buy-no mints more inside its own transaction.
-      await fundTrader(info, BigInt(quantity * 2 * UNIT))
-      return chain.send([await collateralIx('mintPair', info, quantity)], [trader])
+      await fundWallets(info, BigInt(quantity * USDC_PER_PAIR * UNIT))
+      const { userUsdc, userYes, userNo } = await walletAccounts(info, counterparty.publicKey)
+      const ix = await chain
+        .method('meridian', 'mintPair', new BN(quantity))
+        .accountsPartial({
+          user: counterparty.publicKey,
+          market: info.market,
+          yesMint: info.yesMint,
+          noMint: info.noMint,
+          vault: info.vault,
+          userUsdc,
+          userYes,
+          userNo,
+        })
+        .instruction()
+      return chain.send([ix], [counterparty])
+    },
+
+    async quote(market, path, quantity) {
+      const info = marketInfo(market)
+      // The counterparty sells Yes to Buy Yes and Sell No, and buys Yes from Sell Yes and Buy No.
+      const side = path === 'buy-yes' || path === 'sell-no' ? 'ask' : 'bid'
+      const ix = await placeOrderIx(info, counterparty, side, QUOTE_PRICES[path], quantity)
+      return chain.send([ix], [counterparty])
     },
 
     async trade(market, path, quantity) {
       const info = marketInfo(market)
-      const price = ORDER_PRICES[path]
-      const instructions = {
-        'buy-yes': async () => [await placeOrderIx(info, 'bid', price, quantity)],
-        'sell-yes': async () => [await placeOrderIx(info, 'ask', price, quantity)],
-        // Buy No: mint a pair and offer its Yes.
-        'buy-no': async () => [
-          await collateralIx('mintPair', info, quantity),
-          await placeOrderIx(info, 'ask', price, quantity),
-        ],
-        // Sell No: bid for Yes and merge a held pair back into USDC.
-        'sell-no': async () => [
-          await placeOrderIx(info, 'bid', price, quantity),
-          await collateralIx('mergePair', info, quantity),
-        ],
+      const context = await traderContext(info)
+      const price = QUOTE_PRICES[path]
+      // Each order crosses the counterparty's quote at its price, so it fills in full.
+      const build = {
+        'buy-yes': (blockhash: string) =>
+          buildBuyYesTransaction(context(blockhash), {
+            kind: 'Limit',
+            priceCents: price,
+            qty: quantity,
+          }),
+        'sell-yes': (blockhash: string) =>
+          buildSellYesTransaction(context(blockhash), {
+            kind: 'Limit',
+            priceCents: price,
+            qty: quantity,
+          }),
+        'buy-no': (blockhash: string) =>
+          buildBuyNoTransaction(context(blockhash), {
+            kind: 'Limit',
+            noPriceCents: 100 - price,
+            qty: quantity,
+          }),
+        'sell-no': (blockhash: string) =>
+          buildSellNoTransaction(context(blockhash), { noPriceCents: 100 - price, qty: quantity }),
       }[path]
-      return chain.send(await instructions(), [trader])
+      return chain.sendVersioned(build, trader)
     },
 
-    async quote() {
-      throw new Error('not implemented')
-    },
-
-    async balances() {
-      throw new Error('not implemented')
+    async balances(market) {
+      const info = marketInfo(market)
+      return {
+        trader: await walletBalances(info, trader.publicKey),
+        counterparty: await walletBalances(info, counterparty.publicKey),
+      }
     },
 
     async publishRelayClose(market) {
@@ -683,7 +766,7 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
 
     async redeem(market) {
       const info = marketInfo(market)
-      const { userUsdc, userYes, userNo } = await traderAccounts(info)
+      const { userUsdc, userYes, userNo } = await walletAccounts(info, trader.publicKey)
       const balance = async (account: PublicKey) =>
         new BN((await chain.connection.getTokenAccountBalance(account)).value.amount)
       const ix = await chain

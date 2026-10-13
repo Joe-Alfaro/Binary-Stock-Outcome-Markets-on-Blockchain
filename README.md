@@ -72,9 +72,12 @@ make dev
 `make dev` starts a local validator, builds and deploys both programs, bootstraps config with a mock
 USDC mint, creates sample AAPL and MSFT markets that close in 30 minutes, then starts the worker
 (with the `mock` price source and demo mode on) and the web app. The validator uses
-`LOCAL_VALIDATOR_RPC_PORT` (default 8913, WebSocket on the next port, faucet on the one after) and
-refuses ports that touch 8899, 8900 or 9900. On a local validator the script airdrops SOL to every
-role key, so no funding is needed. `make dev ARGS=--dry-run` prints the steps without running them.
+`LOCAL_VALIDATOR_RPC_PORT` (default 8913, WebSocket on the next port, faucet on the one after),
+gossip on the RPC port + 400 and a 40-port dynamic range just above it, and refuses ports that
+touch 8899, 8900, 9900 or 9600-9650. The worker and the web app get the program IDs from the
+keypairs just deployed, and the web app gets relay signer 1's public key (never its secret) for
+live prices. On a local validator the script airdrops SOL to every role key, so no funding is
+needed. `make dev ARGS=--dry-run` prints the steps without running them.
 
 `make gates` runs every quality gate (formatting, lint, type checks, clippy and all test suites).
 `make test` runs only the tests.
@@ -129,21 +132,23 @@ make demo ARGS=--dry-run   # the same steps against a built-in fake chain
 `make demo` runs one full market lifecycle in a few minutes instead of waiting for a real 4:00 PM
 close:
 
-1. Creates an AAPL market whose close is 90 seconds away, with the strike one dollar under a
-   recorded real close, so the replayed close settles Yes.
-2. Funds a fresh trader wallet and mints 10 Yes + No pairs.
-3. Runs the four trade paths: Buy Yes, Sell Yes, Buy No (mint a pair and offer its Yes) and Sell No
-   (bid for Yes and merge a held pair back into USDC).
+1. Creates an AAPL market whose close is 90 seconds away, with the strike one dollar over a
+   recorded real close, so the replayed close settles No.
+2. Funds two fresh wallets, a trader and a counterparty, and the counterparty mints 10 Yes + No
+   pairs.
+3. Runs the four trade paths. Before each one the counterparty quotes it, then the trader takes the
+   quote with the same SDK transaction the web app sends: Buy Yes 2, Sell Yes 2, Buy No 2 (mint
+   pairs and sell their Yes) and Sell No 1 (buy Yes and merge the pairs back into USDC). After
+   every step it records both wallets' balances and stops if a path doesn't fill as promised.
 4. Waits for the close, publishes the replayed close through the relay signer, settles the market and
-   redeems the winning tokens.
+   redeems the trader's remaining No for its payout.
 
 It prints every transaction's signature, explorer link and confirmation time, and the settlement
 delay measured from the close. The demo refuses any cluster other than localnet or devnet. Demo
 markets are flagged on-chain, and the relay logs the replayed price as replayed.
 
-Known gaps: the demo's four orders come from a single trader and rest on the book without filling,
-because a second funded counterparty isn't set up yet. The demo has not been run end to end on
-devnet; its chain client was written against the program branches before they merged.
+Known gaps: the demo has not been run end to end on devnet. `tests/demo.test.ts` runs it on a local
+validator and checks every path's fill from the confirmed transactions.
 
 ## Why Solana
 

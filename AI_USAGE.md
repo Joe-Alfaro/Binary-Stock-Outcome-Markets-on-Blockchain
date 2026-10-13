@@ -2,6 +2,20 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — `make dev` ports and config, and demo fills (`feat/dev-demo`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote red tests for the validator's gossip and dynamic
+  ports, the web app's program IDs and relay signer key, and the demo's four trade paths filling
+  against a counterparty (unit tests and an on-chain test). The implementation worker, without
+  changing the tests, pinned gossip and a 40-port dynamic range clear of CI's reserved block,
+  passed the just-deployed program IDs to the worker and web app and relay signer 1's public key
+  to the web app, and rewrote the demo client so a funded counterparty mints and quotes each path
+  and the trader takes it with the SDK's Buy Yes, Sell Yes, Buy No and Sell No builders. The demo
+  checks each fill and the redeem from both wallets' balances, and its market now settles No so
+  the trader's kept No pays out.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Lifecycle integration tests and the automation chain client (`feat/lifecycle`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
