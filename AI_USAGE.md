@@ -2,6 +2,21 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Web app (`feat/web`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the implementation worker of a TDD pair.
+- **What the AI did:** implemented the Next.js app against the test worker's red tests: the
+  Landing, Markets, Trade, Portfolio and History pages; the wallet button over the Phantom and
+  Solflare adapters; live oracle prices with publish times in ET and a stale marker; contract
+  cards with the demo badge and settled outcomes; Yes and No book views from one book, kept live
+  by an account subscription with a 1 s polling fallback; the trade panel with the payoff line,
+  the position-constraint block and one signature per trade at `confirmed`; plain-language error
+  messages; and the portfolio, market-maker and history views over the SDK P&L replay. Added a
+  real `ChainClient` over `@solana/web3.js` (account and event decoders without an IDL, with
+  their own tests) that takes the SDK transaction builders by interface until they merge.
+  Logged its design calls as D48 in the local decisions log.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — SDK trading logic (`feat/sdk-logic`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), running as the implementation worker of a TDD pair.
