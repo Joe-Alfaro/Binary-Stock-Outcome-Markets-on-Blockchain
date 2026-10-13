@@ -308,14 +308,18 @@ settlement, the admin fallback and redeem), the shared math in Rust and TypeScri
 builders, redeem and close-out builders and trading logic, the price sources, the trading
 calendar, alert sinks, morning and settlement jobs, the relay publisher, the ops scripts, and the
 web app (Landing, Markets, Trade, Portfolio and History pages, Phantom and Solflare wallets, live
-book and prices). The web app trades and redeems through the SDK builders. Close out orders and
+book and prices), and demo mode (an admin toggle that lets markets use custom times; otherwise the
+program enforces the regular schedule). The web app trades and redeems through the SDK builders.
+The worker runs the morning job scheduler and the settlement loop against the chain. Lifecycle
+integration tests on a local validator cover create, mint, the four trade paths, the relay close,
+settlement, the admin fallback, redeem and both jobs against the real chain client. Close out orders and
 redeem is one transaction unless the wallet has more resting orders than fit in one; then the
 wallet approves each transaction in order.
 
 Not finished yet:
 
-- The worker's entry point serves `/healthz` but doesn't yet start the scheduler, jobs and relay
-  publisher. Each piece is tested on its own.
+- The worker's entry point doesn't yet start the relay publisher and price endpoint. The publisher
+  is tested on its own.
 - The admin CLI (config updates, propose and finalize admin price, pause) and the rent measurement
   script.
 - On-chain Pyth and Chainlink adapters (see [Price oracle](#price-oracle)).
