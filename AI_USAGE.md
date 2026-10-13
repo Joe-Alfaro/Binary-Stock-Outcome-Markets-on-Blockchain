@@ -2,6 +2,32 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — README and doc checks (`feat/docs`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the checks, another wrote the docs.
+- **What the AI did:** the test worker wrote `node:test` doc checks for the README sections, the
+  dependency table (computed from every manifest), regulatory-claim phrases, forbidden names read
+  from a file outside the repo, and this log. The implementation worker wrote `README.md` from the
+  code on every feature branch, merged or not: setup, devnet funding, deploy, the demo, the chain
+  and oracle rationale, the settlement schedule, finality, the `merge_pair` deviation, a
+  dependency table that also covers unmerged branches, current status and limitations. It didn't
+  change the checks.
+- **Human review:** pending MR review.
+
+## 2026-10-12 — Ops scripts and deploy config (`feat/ops`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote red tests for the mainnet guard, key loading and
+  separation, the `.env.example` scan, the deploy, bootstrap, dev and demo scripts, their entry
+  points and Makefile targets, the Railway config and the worker health endpoint. The
+  implementation worker wrote the code to pass them without changing the tests: the guard
+  (cluster name, RPC URL and genesis hash), key loading, the `make dev`, `make deploy-devnet`
+  and `make demo` scripts with dry runs, an Anchor-backed chain client for real runs, the
+  `/healthz` server, and Railway configs for `web` and `automation`. It validated both services
+  locally by building and starting them and hitting their health checks. No devnet run yet:
+  the chain client waits on the program packages.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Trade paths (`feat/trade-paths`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
@@ -106,20 +132,6 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   recovery), the calendar-gated live-price loop with backoff, demo labeling, and an Anchor-backed
   `OracleClient` for `meridian_oracle`. It also added `latest()` to the Yahoo and mock sources,
   writing its own tests for that method and for the client's PDA and argument encoding.
-- **Human review:** pending MR review.
-
-## 2026-10-12 — Ops scripts and deploy config (`feat/ops`)
-
-- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
-- **What the AI did:** the test worker wrote red tests for the mainnet guard, key loading and
-  separation, the `.env.example` scan, the deploy, bootstrap, dev and demo scripts, their entry
-  points and Makefile targets, the Railway config and the worker health endpoint. The
-  implementation worker wrote the code to pass them without changing the tests: the guard
-  (cluster name, RPC URL and genesis hash), key loading, the `make dev`, `make deploy-devnet`
-  and `make demo` scripts with dry runs, an Anchor-backed chain client for real runs, the
-  `/healthz` server, and Railway configs for `web` and `automation`. It validated both services
-  locally by building and starting them and hitting their health checks. No devnet run yet:
-  the chain client waits on the program packages.
 - **Human review:** pending MR review.
 
 ## 2026-10-12 — Price providers (`feat/providers`)

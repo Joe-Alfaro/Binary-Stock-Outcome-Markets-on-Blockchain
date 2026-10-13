@@ -19,8 +19,9 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present && npm run test:scripts",
-    "test:scripts": "node --import tsx --test 'scripts/**/*.test.ts'",
+    "test": "npm run test --workspaces --if-present && npm run test:scripts && npm run test:docs",
+    "test:scripts": "node --import tsx --test 'scripts/*.test.ts' 'scripts/lib/**/*.test.ts'",
+    "test:docs": "node --import tsx --test 'scripts/docs-check/**/*.test.ts'",
     "gates": "make gates",
     "prepare": "husky"
   },
