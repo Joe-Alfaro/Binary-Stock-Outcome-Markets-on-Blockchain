@@ -365,7 +365,7 @@ Not finished yet:
 - **Order book capacity.** Each book holds 32 orders per side and 32 trader seats. A busy strike
   can fill up; seats are released by `settle_funds`. A large order against a deep book can stop at
   the 16-fill cap and need a second transaction. A market order sweeping all 16 fills from 16
-  makers used 139,033 compute units on the local validator (87,811 for the instruction alone in
+  makers used about 140,000 compute units on the local validator (136,033 and 139,033 in two runs) (87,811 for the instruction alone in
   LiteSVM), well under the 1.4M per-transaction limit.
 - **Devnet costs and limits.** Rent is 1.74 SOL per trading day and isn't reclaimed. Devnet
   faucets and public RPCs are rate-limited; set `SOLANA_RPC_URL` to a dedicated RPC if needed.

@@ -2,6 +2,19 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — README measurements, donation scenario and fixture provenance (`feat/docs-measure`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote README checks (R6, R13, R19), a validator scenario
+  that donates 5 USDC and then mints, merges, trades, settles and redeems, a max-sweep compute
+  measurement and a rent check on the local validator, and a Yahoo fixture provenance check (R39).
+  The implementation worker, without changing the tests, documented vault donations, direct
+  burns, adding strikes and the measured rent (0.035 SOL per market, 1.74 SOL per trading day)
+  and compute (about 140,000 units for a 16-fill sweep) in the README, and added
+  `fixtures/provenance.json`. It tried to record real Yahoo responses (three requests, all HTTP
+  429), so only the 429 body is marked recorded and the JSON fixtures stay hand-written.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Lifecycle integration tests and the automation chain client (`feat/lifecycle`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
