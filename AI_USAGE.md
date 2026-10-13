@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — Architecture update (`docs/architecture-update`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as an implementation worker.
+- **What the AI did:** rewrote `ARCHITECTURE.md` against the requirements and decisions: why a
+  custom relay oracle is used and how to switch a slot to Pyth or Chainlink, the Yahoo chart API
+  and `mock` relay sources, the +15 min escalation, designs for each gotcha requirement
+  (canonical close record, one price per ticker and day, collateral counter, in-book trader
+  seats, merge-up-to, live oracle prices, mainnet guard, rent sizing), a table mapping every
+  requirement to its components and a gotchas table. Logged its design calls as decisions
+  D15–D21 in the local decisions log.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Repo setup (`feat/repo-setup`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), running as an implementation worker.
