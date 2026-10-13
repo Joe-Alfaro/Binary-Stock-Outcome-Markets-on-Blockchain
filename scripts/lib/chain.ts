@@ -335,9 +335,13 @@ export function createBootstrapClient(env: NodeJS.ProcessEnv): BootstrapClient {
       return { mint: mint.publicKey.toBase58(), signature }
     },
 
-    // Stub for the demo-mode tests (R44); the implementation worker wires it.
-    async setDemoMode() {
-      throw new Error('setDemoMode is not wired yet')
+    async setDemoMode(enabled) {
+      const { admin } = chain.keys()
+      const ix = await chain
+        .method('meridian', 'setDemoMode', enabled)
+        .accountsPartial({ admin: admin.publicKey })
+        .instruction()
+      return chain.sendAndConfirm([ix], [admin])
     },
 
     async initializeConfig(params: ConfigParams) {

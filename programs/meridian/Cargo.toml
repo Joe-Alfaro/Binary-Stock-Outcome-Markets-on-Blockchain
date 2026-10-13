@@ -10,7 +10,10 @@ crate-type = ["cdylib", "lib"]
 name = "meridian"
 
 [features]
-default = []
+# `devnet` compiles in `set_demo_mode` (D21). Every local, CI and devnet build keeps it; a mainnet
+# build passes `--no-default-features`.
+default = ["devnet"]
+devnet = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-log-ix-name = []
