@@ -2,7 +2,6 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
-
 ## 2026-10-12 — Trade paths (`feat/trade-paths`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
@@ -108,7 +107,6 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   `OracleClient` for `meridian_oracle`. It also added `latest()` to the Yahoo and mock sources,
   writing its own tests for that method and for the client's PDA and argument encoding.
 - **Human review:** pending MR review.
-
 
 ## 2026-10-12 — Price providers (`feat/providers`)
 
