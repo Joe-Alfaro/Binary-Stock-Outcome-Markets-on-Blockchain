@@ -3,6 +3,7 @@ import { bootstrap, type BootstrapClient, type BootstrapResult } from './bootstr
 import { assertSafeTarget, guardCluster } from './guard.js'
 import { isEntryPoint, loadDotEnv, runMain, spawnRunner } from './lib/cli.js'
 import { loadRoleKeys, type ReadFile } from './lib/keys.js'
+import { ensureProgramKeypairs } from './program-keys.js'
 
 export interface CommandRunner {
   run(
@@ -23,6 +24,11 @@ export interface DeployOptions {
   client: BootstrapClient
   /** Persists the program IDs (Anchor.toml and .env in the real script). */
   recordProgramIds: (ids: ProgramIds) => Promise<void>
+  /**
+   * Puts the long-lived program keypairs in place and returns their IDs (the real script uses
+   * `ensureProgramKeypairs`). The deployed IDs must match them.
+   */
+  prepareProgramKeypairs?: () => ProgramIds | Promise<ProgramIds>
   readFile?: ReadFile
   mockUsdc?: boolean
   log?: (line: string) => void
@@ -74,7 +80,9 @@ export function updateAnchorToml(content: string, ids: ProgramIds): string {
 
 /** Guards the cluster, builds and deploys both programs, records their IDs and bootstraps config. */
 export async function deployDevnet(options: DeployOptions): Promise<DeployResult> {
-  const { env, runner, client, recordProgramIds, readFile, mockUsdc, log = console.log } = options
+  const { env, runner, client, recordProgramIds, prepareProgramKeypairs, readFile, mockUsdc } =
+    options
+  const log = options.log ?? console.log
   const target = await assertSafeTarget(env, client)
   if (target.cluster !== 'devnet') {
     throw new Error(`deploy-devnet deploys only to devnet, not ${target.cluster}`)
@@ -82,13 +90,27 @@ export async function deployDevnet(options: DeployOptions): Promise<DeployResult
   // Fails on missing or shared role keys before anything is built or sent.
   loadRoleKeys(env, readFile)
 
+  const expected = await prepareProgramKeypairs?.()
+  // Points declare_id! and Anchor.toml at the program keypairs before building.
+  await runner.run('anchor', ['keys', 'sync'])
   log('Building both programs')
   await runner.run('anchor', ['build'])
   log(`Deploying both programs to ${target.rpcUrl}`)
   await runner.run('anchor', ['deploy', '--provider.cluster', target.rpcUrl])
   const programIds = parseAnchorKeysList((await runner.run('anchor', ['keys', 'list'])).stdout)
+  if (
+    expected &&
+    (expected.meridian !== programIds.meridian ||
+      expected.meridianOracle !== programIds.meridianOracle)
+  ) {
+    throw new Error(
+      `Deployed program IDs ${JSON.stringify(programIds)} differ from the keypairs in keys/ ${JSON.stringify(expected)}`,
+    )
+  }
   await recordProgramIds(programIds)
-  log(`Program IDs: meridian ${programIds.meridian}, meridian_oracle ${programIds.meridianOracle}`)
+  log('Program IDs (recorded in .env and Anchor.toml; copy into the README):')
+  log(`  meridian         ${programIds.meridian}`)
+  log(`  meridian_oracle  ${programIds.meridianOracle}`)
 
   const result = await bootstrap({
     env: {
@@ -127,6 +149,7 @@ async function main() {
     runner: spawnRunner(),
     client: createBootstrapClient(process.env),
     recordProgramIds: recordToFiles,
+    prepareProgramKeypairs: () => ensureProgramKeypairs(),
     mockUsdc: process.argv.includes('--mock-usdc'),
   })
 }

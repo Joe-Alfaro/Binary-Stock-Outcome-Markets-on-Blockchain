@@ -3,7 +3,15 @@ import { DEFAULT_LOCAL_RPC_PORT, guardCluster } from './guard.js'
 import { isEntryPoint, loadDotEnv, runMain, spawnRunner } from './lib/cli.js'
 
 export type DevStepId =
-  'validator' | 'build' | 'deploy' | 'bootstrap' | 'sample-markets' | 'worker' | 'web'
+  | 'validator'
+  | 'program-keys'
+  | 'keys-sync'
+  | 'build'
+  | 'deploy'
+  | 'bootstrap'
+  | 'sample-markets'
+  | 'worker'
+  | 'web'
 
 export interface DevStep {
   id: DevStepId
@@ -69,6 +77,9 @@ export function planDev(env: NodeJS.ProcessEnv): DevPlan {
         ],
         background: true,
       },
+      // The same long-lived program keypairs as devnet, so the IDs match everywhere.
+      { id: 'program-keys', command: 'npx', args: ['tsx', 'scripts/program-keys.ts'] },
+      { id: 'keys-sync', command: 'anchor', args: ['keys', 'sync'] },
       { id: 'build', command: 'anchor', args: ['build'] },
       { id: 'deploy', command: 'anchor', args: ['deploy', '--provider.cluster', rpcUrl] },
       {
