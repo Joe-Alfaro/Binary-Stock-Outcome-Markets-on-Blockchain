@@ -318,6 +318,20 @@ impl Env {
         }
     }
 
+    pub fn ix_set_demo_mode(&self, admin: &Pubkey, enabled: bool) -> Instruction {
+        Instruction {
+            program_id: meridian::ID,
+            accounts: Self::admin_metas(admin),
+            data: meridian::instruction::SetDemoMode { enabled }.data(),
+        }
+    }
+
+    pub fn set_demo_mode(&mut self, enabled: bool) {
+        let admin = self.admin.insecure_clone();
+        let ix = self.ix_set_demo_mode(&admin.pubkey(), enabled);
+        assert_ok(self.send_one(ix, &admin));
+    }
+
     pub fn pause(&mut self) {
         let admin = self.admin.insecure_clone();
         let ix = self.ix_pause(&admin.pubkey());

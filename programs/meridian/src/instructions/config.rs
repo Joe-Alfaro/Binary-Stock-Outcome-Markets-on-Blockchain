@@ -124,3 +124,11 @@ pub fn handle_unpause(ctx: Context<AdminConfig>) -> Result<()> {
     ctx.accounts.config.paused = false;
     Ok(())
 }
+
+/// Lets the admin create markets with custom times (R44). Markets already created keep their
+/// `demo` flag.
+#[cfg(feature = "devnet")]
+pub fn handle_set_demo_mode(ctx: Context<AdminConfig>, enabled: bool) -> Result<()> {
+    ctx.accounts.config.demo_mode = enabled;
+    Ok(())
+}

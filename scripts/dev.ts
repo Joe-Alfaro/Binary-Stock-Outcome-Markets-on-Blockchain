@@ -86,7 +86,7 @@ export function planDev(env: NodeJS.ProcessEnv): DevPlan {
         id: 'bootstrap',
         command: 'npx',
         args: ['tsx', 'scripts/bootstrap.ts', '--mock-usdc'],
-        env: local,
+        env: { ...local, DEMO_MODE: 'true' },
       },
       {
         id: 'sample-markets',

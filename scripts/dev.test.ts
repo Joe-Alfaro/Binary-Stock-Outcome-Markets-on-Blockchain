@@ -79,6 +79,13 @@ describe('planDev (R60)', () => {
     assert.equal(bootstrap.env?.SOLANA_RPC_URL, plan.rpcUrl)
   })
 
+  // R44: the local stack runs in demo mode, so bootstrap turns it on and sample markets can use
+  // custom times.
+  it('bootstraps with DEMO_MODE=true', () => {
+    const bootstrap = step(planDev({}).steps, 'bootstrap')
+    assert.equal(bootstrap.env?.DEMO_MODE, 'true')
+  })
+
   it('starts the worker with the mock relay source and the web app against the local RPC', () => {
     const plan = planDev({})
     const worker = step(plan.steps, 'worker')

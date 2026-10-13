@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::errors::MeridianError;
+use crate::schedule::is_regular_schedule;
 use crate::state::*;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq)]
@@ -144,6 +145,18 @@ fn create(ctx: Context<CreateMarket>, args: CreateMarketArgs) -> Result<()> {
         MeridianError::InvalidMarketTimes
     );
     require!(now < args.close_ts, MeridianError::MarketClosed);
+    // Custom times only for the admin in demo mode (R44, D49).
+    let custom_allowed = config.demo_mode && ctx.accounts.authority.key() == config.admin;
+    require!(
+        custom_allowed
+            || is_regular_schedule(
+                args.trading_day,
+                args.mint_open_ts,
+                args.trading_open_ts,
+                args.close_ts
+            ),
+        MeridianError::NonStandardSchedule
+    );
 
     let ticker_day = &mut ctx.accounts.ticker_day;
     // `init_if_needed` leaves a fresh account zeroed, and no real day is 0.

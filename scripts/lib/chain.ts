@@ -337,6 +337,15 @@ export function createBootstrapClient(env: NodeJS.ProcessEnv): BootstrapClient {
       return { mint: mint.publicKey.toBase58(), signature }
     },
 
+    async setDemoMode(enabled) {
+      const { admin } = chain.keys()
+      const ix = await chain
+        .method('meridian', 'setDemoMode', enabled)
+        .accountsPartial({ admin: admin.publicKey })
+        .instruction()
+      return chain.sendAndConfirm([ix], [admin])
+    },
+
     async initializeConfig(params: ConfigParams) {
       await chain.fundOnLocalnet()
       const deployer = chain.deployer()

@@ -67,6 +67,7 @@ export function fakeBootstrapClient(genesisHash = DEVNET_GENESIS_HASH) {
   const configs: ConfigParams[] = []
   const signers: string[] = []
   const mintDecimals: number[] = []
+  const demoModes: boolean[] = []
   const client: BootstrapClient = {
     async getGenesisHash() {
       log.record('getGenesisHash')
@@ -87,6 +88,11 @@ export function fakeBootstrapClient(genesisHash = DEVNET_GENESIS_HASH) {
       signers.push(signer)
       return `sig-signer-${signers.length}`
     },
+    async setDemoMode(enabled) {
+      log.record(`setDemoMode:${enabled}`)
+      demoModes.push(enabled)
+      return 'sig-demo-mode'
+    },
   }
-  return { client, log, configs, signers, mintDecimals }
+  return { client, log, configs, signers, mintDecimals, demoModes }
 }

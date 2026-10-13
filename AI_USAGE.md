@@ -2,6 +2,17 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Demo mode (`feat/demo-mode`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote red LiteSVM tests for `set_demo_mode`, the
+  regular-schedule check on market times, admin-only custom times in demo mode and the immutable
+  `Market.demo` flag, plus bootstrap and `make dev` tests for `DEMO_MODE`. The implementation
+  worker wrote the code to pass them without changing the tests: `set_demo_mode` behind a
+  default-on `devnet` feature, an on-chain ET schedule check with the US daylight-saving rule,
+  bootstrap's `DEMO_MODE` handling and the chain client call.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — README and doc checks (`feat/docs`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the checks, another wrote the docs.
