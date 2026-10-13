@@ -6,6 +6,7 @@ pub mod instructions;
 pub mod state;
 
 pub use instructions::*;
+pub use state::{OrderKind, Side};
 
 declare_id!("9o9a9HpN6Aq4UBeozWshAKBugjtToxWdsVzSMPkVHEMX");
 
@@ -52,6 +53,24 @@ pub mod meridian {
 
     pub fn merge_pair(ctx: Context<Collateral>, n: u64) -> Result<()> {
         instructions::collateral::handle_merge_pair(ctx, n)
+    }
+
+    pub fn place_order(
+        ctx: Context<PlaceOrder>,
+        side: Side,
+        kind: OrderKind,
+        price: u8,
+        qty: u64,
+    ) -> Result<()> {
+        instructions::orderbook::handle_place_order(ctx, side, kind, price, qty)
+    }
+
+    pub fn cancel_order(ctx: Context<CancelOrder>, order_id: u64) -> Result<()> {
+        instructions::orderbook::handle_cancel_order(ctx, order_id)
+    }
+
+    pub fn settle_funds(ctx: Context<SettleFunds>) -> Result<()> {
+        instructions::orderbook::handle_settle_funds(ctx)
     }
 }
 
