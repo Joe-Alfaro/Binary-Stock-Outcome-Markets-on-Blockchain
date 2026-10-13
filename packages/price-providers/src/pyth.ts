@@ -1,4 +1,5 @@
-import { notImplemented } from './errors.js'
+import { isRecord, malformed, parseInteger, parseTimestamp } from './parse.js'
+import { inRegularSession } from './time.js'
 import type { NormalizedPrice } from './types.js'
 
 /** `Equity.US.<TICKER>/USD` feed IDs. */
@@ -12,6 +13,30 @@ export const PYTH_FEED_IDS: Readonly<Record<string, string>> = {
   TSLA: '16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1',
 }
 
+const TICKER_BY_FEED_ID = new Map(Object.entries(PYTH_FEED_IDS).map(([ticker, id]) => [id, ticker]))
+
+function normalizeEntry(entry: unknown, closeTs: number): NormalizedPrice | null {
+  if (!isRecord(entry) || typeof entry.id !== 'string' || !isRecord(entry.price)) {
+    throw malformed('Hermes update is missing its id or price')
+  }
+  const ticker = TICKER_BY_FEED_ID.get(entry.id.toLowerCase().replace(/^0x/, ''))
+  if (ticker === undefined) return null
+  const { price, conf, expo, publish_time: publishTime } = entry.price
+  if (typeof expo !== 'number' || !Number.isInteger(expo)) {
+    throw malformed(`Hermes expo is not an integer: ${String(expo)}`)
+  }
+  const timestamp = parseTimestamp(publishTime, 'publish_time')
+  return {
+    ticker,
+    price: parseInteger(price, 'price'),
+    conf: parseInteger(conf, 'conf'),
+    expo,
+    publishTime: timestamp,
+    session: inRegularSession(timestamp, closeTs) ? 'regular' : 'outside-regular',
+    officialClose: false,
+  }
+}
+
 /**
  * Normalizes a Hermes `GET /v2/updates/price/{publish_time}` response. Session is regular when
  * the publish time falls between 09:30 ET and `closeTs` on the close's day. Pyth never labels an
@@ -21,5 +46,10 @@ export function normalizePythUpdates(
   response: unknown,
   context: { closeTs: number },
 ): NormalizedPrice[] {
-  return notImplemented(response, context)
+  if (!isRecord(response) || !Array.isArray(response.parsed)) {
+    throw malformed('Hermes response has no parsed updates')
+  }
+  return response.parsed
+    .map((entry) => normalizeEntry(entry, context.closeTs))
+    .filter((update): update is NormalizedPrice => update !== null)
 }
