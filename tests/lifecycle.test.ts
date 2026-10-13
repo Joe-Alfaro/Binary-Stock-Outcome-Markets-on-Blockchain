@@ -63,6 +63,7 @@ import {
   freshWallet,
   meridian,
   mintPair,
+  oracle,
   publishRelayClose,
   redeemAll,
   sendSdkTransaction,
@@ -615,6 +616,8 @@ describe('lifecycle (R57)', () => {
         connection,
         authority: roles.automation,
         idl: meridian.idl,
+        // Close records live under the deployed oracle program, whose ID follows the local keypair.
+        oracleProgramId: oracle.programId,
       })
       const run = async () => {
         const clock = instantClock((times.mintOpenTs - 3 * 3600) * 1000)
@@ -672,6 +675,8 @@ describe('lifecycle (R57)', () => {
         connection,
         authority: roles.automation,
         idl: meridian.idl,
+        // Close records live under the deployed oracle program, whose ID follows the local keypair.
+        oracleProgramId: oracle.programId,
       })
       const alerter = recordingAlerter(systemClock)
       const controller = new AbortController()
