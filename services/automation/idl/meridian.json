@@ -1471,8 +1471,9 @@
         {
           "name": "close_record",
           "docs": [
-            "`[\"close\", slot relay signer, ticker, trading_day (u32 LE)]`. Validated in the handler,",
-            "because it is legitimately uninitialized when the ticker-day is final from an admin price."
+            "`[\"close\", slot relay signer, ticker, trading_day (u32 LE)]`; for a Pyth slot, the first",
+            "receiver price update. Validated in the handler, because it is legitimately uninitialized",
+            "when the ticker-day is final from an admin price."
           ]
         }
       ],
@@ -1480,6 +1481,75 @@
         {
           "name": "slot",
           "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "settle_market_with_reports",
+      "discriminator": [
+        246,
+        145,
+        60,
+        237,
+        216,
+        106,
+        91,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "ticker_day",
+          "writable": true
+        },
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "verifier_program"
+        },
+        {
+          "name": "verifier_account"
+        },
+        {
+          "name": "access_controller"
+        },
+        {
+          "name": "report_config"
+        }
+      ],
+      "args": [
+        {
+          "name": "slot",
+          "type": "u8"
+        },
+        {
+          "name": "reports",
+          "type": {
+            "vec": "bytes"
+          }
         }
       ]
     },
