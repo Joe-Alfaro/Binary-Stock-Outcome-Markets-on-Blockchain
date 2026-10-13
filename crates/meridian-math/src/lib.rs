@@ -1,6 +1,11 @@
 //! Pure settlement math shared by the on-chain program and mirrored in `packages/sdk/src/math`.
 //!
 //! No Anchor or Solana dependency, so the `meridian` program and host-side tests can both use it.
+//! `no_std` with `alloc`, no floating point: every comparison is exact `i128` integer math.
+
+#![no_std]
+
+extern crate alloc;
 
 pub mod closing;
 pub mod payout;

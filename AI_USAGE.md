@@ -2,6 +2,17 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — Settlement math (`feat/math`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), as a TDD pair: one session wrote the red tests and
+  shared fixtures, a second implemented them.
+- **What the AI did:** implemented the closing-price rule (validation, official close, exact
+  timestamp and exact-rational interpolation), the payout rule and the strike ladder in the
+  `no_std` crate `crates/meridian-math`, and the bigint TypeScript twin in
+  `packages/sdk/src/math`. Both pass the shared fixtures and the property tests (10,000 proptest
+  cases in Rust, 2,000 seeded cases in TS). Tests were not changed by the implementation.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — Architecture update (`docs/architecture-update`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), running as an implementation worker.

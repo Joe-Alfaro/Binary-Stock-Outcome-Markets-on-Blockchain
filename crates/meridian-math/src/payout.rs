@@ -28,12 +28,20 @@ pub fn settle_outcome(
     closing: &ClosingPrice,
     strike: &Strike,
 ) -> Result<Outcome, ClosingPriceError> {
-    let _ = (closing, strike);
-    todo!("settle_outcome")
+    if closing.expo != strike.expo {
+        return Err(ClosingPriceError::ExpoMismatch);
+    }
+    if closing.numerator >= i128::from(strike.value) * closing.denominator {
+        Ok(Outcome::Yes)
+    } else {
+        Ok(Outcome::No)
+    }
 }
 
 /// USDC base units paid per token of `side` once the market settled with `outcome`.
 pub fn payout_per_token(outcome: Outcome, side: Side) -> u64 {
-    let _ = (outcome, side);
-    todo!("payout_per_token")
+    match (outcome, side) {
+        (Outcome::Yes, Side::Yes) | (Outcome::No, Side::No) => PAYOUT_UNIT,
+        _ => 0,
+    }
 }

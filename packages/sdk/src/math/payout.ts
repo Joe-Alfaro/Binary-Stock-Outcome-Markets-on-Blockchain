@@ -1,4 +1,4 @@
-import type { ClosingPrice } from './closing-price.js'
+import { ClosingPriceError, type ClosingPrice } from './closing-price.js'
 
 /** USDC base units paid per winning token ($1.00). */
 export const PAYOUT_UNIT = 1_000_000n
@@ -18,12 +18,11 @@ export type Side = 'Yes' | 'No'
  * scales differ.
  */
 export function settleOutcome(closing: ClosingPrice, strike: Strike): Outcome {
-  void [closing, strike]
-  throw new Error('settleOutcome is not implemented')
+  if (closing.expo !== strike.expo) throw new ClosingPriceError('ExpoMismatch')
+  return closing.numerator >= strike.value * closing.denominator ? 'Yes' : 'No'
 }
 
 /** USDC base units paid per token of `side` once the market settled with `outcome`. */
 export function payoutPerToken(outcome: Outcome, side: Side): bigint {
-  void [outcome, side]
-  throw new Error('payoutPerToken is not implemented')
+  return outcome === side ? PAYOUT_UNIT : 0n
 }
