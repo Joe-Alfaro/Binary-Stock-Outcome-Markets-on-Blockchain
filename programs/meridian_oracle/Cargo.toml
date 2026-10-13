@@ -20,7 +20,20 @@ custom-heap = []
 custom-panic = []
 
 [dependencies]
-anchor-lang = "1.2.1"
+anchor-lang = { version = "1.2.1", features = ["init-if-needed"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+# In-process program tests (tests/*.rs) run the built program from target/deploy on LiteSVM.
+# Runtime crates from 4.2 on need Rust 1.93 or newer, so `solana-program-runtime` is held at 4.1
+# (which pulls the rest of the runtime with it) to build on the pinned Rust 1.89.
+[dev-dependencies]
+litesvm = "0.15"
+solana-instruction-error = "2"
+solana-keypair = "3"
+solana-message = "4"
+solana-program-runtime = "~4.1"
+solana-signer = "3"
+solana-transaction = "4"
+solana-transaction-error = "3"
