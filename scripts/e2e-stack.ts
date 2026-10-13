@@ -1,4 +1,7 @@
+import { buildBuyNoTransaction, buildBuyYesTransaction } from '@meridian/sdk'
+import type { MarketAccounts, TradeContext } from '@meridian/sdk'
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction } from '@solana/web3.js'
+import type { VersionedTransaction } from '@solana/web3.js'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DEMO_TICKER } from './demo.js'
@@ -18,7 +21,13 @@ import { loadKeypair } from './lib/keys.js'
  *   tsx scripts/e2e-stack.ts deploy   checks both programs are live with the admin as upgrade
  *                                     authority (the validator loads them at genesis)
  *   tsx scripts/e2e-stack.ts market   creates the demo market, funds a maker and a trader with
- *                                     SOL and mock USDC, and writes E2E_STACK_FILE
+ *                                     SOL and mock USDC, prepares the settled market below and
+ *                                     writes E2E_STACK_FILE
+ *
+ * The settled market (R52) is a second demo market, on another ticker, that closes and settles
+ * during this step. The demo strike sits a dollar over the replayed close, so it settles No. The
+ * trader holds 7 winning No (4 bought at 30¢ against the maker's 70¢ Yes bid, 3 from a resting
+ * Buy No limit) and still rests that limit's 3 Yes as an ask at 60¢.
  */
 
 const encoder = new TextEncoder()
@@ -28,6 +37,9 @@ const WALLET_SOL = 5
 const WALLET_USDC = 1_000n * 1_000_000n
 /** `UpgradeableLoaderState::ProgramData`: tag (4), slot (8), Option tag (1), authority (32). */
 const AUTHORITY_OFFSET = 13
+/** The settled market closes this soon after creation: time for its three trades. */
+const SETTLED_CLOSE_LEAD_SECS = 30
+const SETTLED_TICKER = 'MSFT'
 
 function required(env: NodeJS.ProcessEnv, name: string) {
   const value = env[name]
@@ -80,6 +92,94 @@ async function fundWallet(connection: Connection, admin: Keypair, usdcMint: Publ
   return wallet
 }
 
+/** Every account of one demo market, from its PDAs and its vault's mint. */
+async function marketAccounts(
+  connection: Connection,
+  programId: PublicKey,
+  market: PublicKey,
+): Promise<MarketAccounts> {
+  const seed = (name: string) => pda(programId, encoder.encode(name), market.toBytes())
+  // The vault is a USDC token account; a token account starts with its mint.
+  const vault = seed('vault')
+  const vaultInfo = await connection.getAccountInfo(vault)
+  if (!vaultInfo) throw new Error(`Market ${market.toBase58()} has no vault`)
+  return {
+    programId,
+    config: pda(programId, encoder.encode('config')),
+    market,
+    usdcMint: new PublicKey(vaultInfo.data.subarray(0, 32)),
+    yesMint: seed('yes'),
+    noMint: seed('no'),
+    vault,
+    book: seed('book'),
+    yesEscrow: seed('yes_escrow'),
+    usdcEscrow: seed('usdc_escrow'),
+  }
+}
+
+function toBase58(accounts: MarketAccounts) {
+  return Object.fromEntries(Object.entries(accounts).map(([k, v]) => [k, v.toBase58()]))
+}
+
+/** Signs an SDK-built transaction with its one wallet, sends it and waits for confirmation. */
+async function sendSdk(
+  connection: Connection,
+  build: (blockhash: string) => VersionedTransaction,
+  signer: Keypair,
+) {
+  const { blockhash } = await connection.getLatestBlockhash('confirmed')
+  const tx = build(blockhash)
+  tx.sign([signer])
+  await confirmed(connection, await connection.sendRawTransaction(tx.serialize()))
+}
+
+/** The settled market described at the top: closes, settles No, and returns its accounts. */
+async function createSettledMarket(
+  connection: Connection,
+  client: ReturnType<typeof createDemoClient>,
+  programId: PublicKey,
+  wallets: { maker: Keypair; trader: Keypair },
+) {
+  const closeTs = Math.ceil(Date.now() / 1000) + SETTLED_CLOSE_LEAD_SECS
+  const created = await client.createDemoMarket({ ticker: SETTLED_TICKER, closeTs })
+  await client.confirm(created.signature, 'confirmed')
+  const accounts = await marketAccounts(connection, programId, new PublicKey(created.market))
+  const context =
+    (owner: Keypair, no: number) =>
+    (recentBlockhash: string): TradeContext => ({
+      owner: owner.publicKey,
+      market: accounts,
+      holdings: { yes: 0, no },
+      walletYesBaseUnits: 0n,
+      recentBlockhash,
+    })
+  const { maker, trader } = wallets
+  await sendSdk(
+    connection,
+    (b) => buildBuyYesTransaction(context(maker, 0)(b), { kind: 'Limit', priceCents: 70, qty: 4 }),
+    maker,
+  )
+  await sendSdk(
+    connection,
+    (b) =>
+      buildBuyNoTransaction(context(trader, 0)(b), { kind: 'Market', noPriceCents: 30, qty: 4 }),
+    trader,
+  )
+  await sendSdk(
+    connection,
+    (b) =>
+      buildBuyNoTransaction(context(trader, 4)(b), { kind: 'Limit', noPriceCents: 40, qty: 3 }),
+    trader,
+  )
+
+  const waitMs = (closeTs + 1) * 1000 - Date.now()
+  if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs))
+  await client.confirm(await client.publishRelayClose(created.market), 'confirmed')
+  await client.confirm(await client.settle(created.market), 'confirmed')
+  console.log(`Settled market ${SETTLED_TICKER} ${created.market}`)
+  return { ticker: SETTLED_TICKER, market: toBase58(accounts) }
+}
+
 async function createStack(env: NodeJS.ProcessEnv, connection: Connection) {
   const stackFile = required(env, 'E2E_STACK_FILE')
   const client = createDemoClient(env)
@@ -88,41 +188,25 @@ async function createStack(env: NodeJS.ProcessEnv, connection: Connection) {
   await client.confirm(created.signature, 'confirmed')
 
   const programId = new PublicKey(required(env, 'MERIDIAN_PROGRAM_ID'))
-  const market = new PublicKey(created.market)
-  const seed = (name: string) => pda(programId, encoder.encode(name), market.toBytes())
-  // The vault is a USDC token account; a token account starts with its mint.
-  const vault = seed('vault')
-  const vaultInfo = await connection.getAccountInfo(vault)
-  if (!vaultInfo) throw new Error(`Market ${market.toBase58()} has no vault`)
-  const usdcMint = new PublicKey(vaultInfo.data.subarray(0, 32))
+  const accounts = await marketAccounts(connection, programId, new PublicKey(created.market))
 
   const adminKey = loadKeypair(required(env, 'ADMIN_KEYPAIR'))
   const admin = Keypair.fromSecretKey(adminKey.secretKey)
-  const maker = await fundWallet(connection, admin, usdcMint)
-  const trader = await fundWallet(connection, admin, usdcMint)
+  const maker = await fundWallet(connection, admin, accounts.usdcMint)
+  const trader = await fundWallet(connection, admin, accounts.usdcMint)
+  const settled = await createSettledMarket(connection, client, programId, { maker, trader })
 
-  const accounts = {
-    programId,
-    config: pda(programId, encoder.encode('config')),
-    market,
-    usdcMint,
-    yesMint: seed('yes'),
-    noMint: seed('no'),
-    vault,
-    book: seed('book'),
-    yesEscrow: seed('yes_escrow'),
-    usdcEscrow: seed('usdc_escrow'),
-  }
   const stack = {
     rpcUrl: connection.rpcEndpoint,
     ticker: DEMO_TICKER,
-    market: Object.fromEntries(Object.entries(accounts).map(([k, v]) => [k, v.toBase58()])),
+    market: toBase58(accounts),
+    settled,
     maker: Array.from(maker.secretKey),
     trader: Array.from(trader.secretKey),
   }
   mkdirSync(dirname(stackFile), { recursive: true })
   writeFileSync(stackFile, JSON.stringify(stack, null, 2), { mode: 0o600 })
-  console.log(`Demo market ${DEMO_TICKER} ${market.toBase58()}; stack file ${stackFile}`)
+  console.log(`Demo market ${DEMO_TICKER} ${created.market}; stack file ${stackFile}`)
 }
 
 async function main() {

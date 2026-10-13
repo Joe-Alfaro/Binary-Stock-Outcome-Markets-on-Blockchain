@@ -7,7 +7,7 @@ import * as anchor from '@anchor-lang/core'
 import anchorPackage from '@anchor-lang/core'
 import type { Program } from '@anchor-lang/core'
 import { createMockSource } from '@meridian/price-providers'
-import type { MarketAccounts, TradeContext } from '@meridian/sdk'
+import type { MarketAccounts, RestingOrder, TradeContext } from '@meridian/sdk'
 import {
   Keypair,
   LAMPORTS_PER_SOL,
@@ -558,6 +558,46 @@ export async function sendSdkTransaction(tx: VersionedTransaction, wallet: Keypa
       throw new Error(`${error.message}\n${(logs ?? []).join('\n')}`)
     }
     throw error
+  }
+}
+
+/** Zero-copy `OrderBook` layout (`state/orderbook.rs`), the same offsets the app decodes. */
+const BOOK_SIDE_CAPACITY = 32
+const SEAT_CAPACITY = 32
+const ORDER_SIZE = 24
+const SEAT_SIZE = 48
+const BIDS_OFFSET = 8 + 32 * 3 + 8 + 8
+const ASKS_OFFSET = BIDS_OFFSET + BOOK_SIDE_CAPACITY * ORDER_SIZE
+const SEATS_OFFSET = ASKS_OFFSET + BOOK_SIDE_CAPACITY * ORDER_SIZE
+
+/** The wallet's resting orders and seat, read from the book account. */
+export async function walletBook(owner: PublicKey, market: TestMarket) {
+  const info = await connection.getAccountInfo(market.accounts.book, 'confirmed')
+  if (!info) throw new Error('no book account')
+  const data = Buffer.from(info.data)
+  const seatIndex = Array.from({ length: SEAT_CAPACITY }, (_, i) => i).find((i) =>
+    data
+      .subarray(SEATS_OFFSET + i * SEAT_SIZE, SEATS_OFFSET + i * SEAT_SIZE + 32)
+      .equals(owner.toBuffer()),
+  )
+  if (seatIndex === undefined) return { restingOrders: [] as RestingOrder[], seat: null }
+  const seatAt = SEATS_OFFSET + seatIndex * SEAT_SIZE
+  const side = (offset: number, name: RestingOrder['side']) =>
+    Array.from({ length: BOOK_SIDE_CAPACITY }, (_, i) => offset + i * ORDER_SIZE)
+      .map((at) => ({
+        orderId: data.readBigUInt64LE(at),
+        qty: Number(data.readBigUInt64LE(at + 8)),
+        priceCents: data.readUInt8(at + 16),
+        seat: data.readUInt8(at + 17),
+      }))
+      .filter((o) => o.qty > 0 && o.seat === seatIndex)
+      .map(({ orderId, qty, priceCents }) => ({ orderId, side: name, priceCents, qty }))
+  return {
+    restingOrders: [...side(BIDS_OFFSET, 'Bid'), ...side(ASKS_OFFSET, 'Ask')],
+    seat: {
+      freeYesBaseUnits: data.readBigUInt64LE(seatAt + 32),
+      freeUsdcBaseUnits: data.readBigUInt64LE(seatAt + 40),
+    },
   }
 }
 
