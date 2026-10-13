@@ -1,0 +1,30 @@
+{
+  "binary": {
+    "encoding": "hex",
+    "data": [
+      "504e41550100000003b801000000040d00a1c3e5f7d2b4968a0c1e3f5a7b9d0e2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4f6"
+    ]
+  },
+  "parsed": [
+    {
+      "id": "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688",
+      "price": { "price": "24525000", "conf": "12000", "expo": -5, "publish_time": 1791575970 },
+      "ema_price": { "price": "24519850", "conf": "13110", "expo": -5, "publish_time": 1791575970 },
+      "metadata": {
+        "slot": 233441902,
+        "proof_available_time": 1791575971,
+        "prev_publish_time": 1791575969
+      }
+    },
+    {
+      "id": "d0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1",
+      "price": { "price": "52162000", "conf": "31000", "expo": -5, "publish_time": 1791575970 },
+      "ema_price": { "price": "52150410", "conf": "29870", "expo": -5, "publish_time": 1791575970 },
+      "metadata": {
+        "slot": 233441902,
+        "proof_available_time": 1791575971,
+        "prev_publish_time": 1791575968
+      }
+    }
+  ]
+}

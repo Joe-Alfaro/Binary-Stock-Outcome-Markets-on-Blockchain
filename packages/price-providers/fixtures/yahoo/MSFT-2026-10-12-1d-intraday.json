@@ -1,0 +1,62 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "MSFT",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "firstTradeDate": 345479400,
+          "hasPrePostMarketData": true,
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "exchangeTimezoneName": "America/New_York",
+          "longName": "Microsoft Corporation",
+          "shortName": "Microsoft Corporation",
+          "priceHint": 2,
+          "regularMarketPrice": 523.11,
+          "regularMarketTime": 1791817200,
+          "chartPreviousClose": 514.1,
+          "scale": 3,
+          "currentTradingPeriod": {
+            "pre": {
+              "timezone": "EDT",
+              "start": 1791806400,
+              "end": 1791826200,
+              "gmtoffset": -14400
+            },
+            "regular": {
+              "timezone": "EDT",
+              "start": 1791826200,
+              "end": 1791849600,
+              "gmtoffset": -14400
+            },
+            "post": {
+              "timezone": "EDT",
+              "start": 1791849600,
+              "end": 1791864000,
+              "gmtoffset": -14400
+            }
+          },
+          "dataGranularity": "1d",
+          "range": "5d"
+        },
+        "timestamp": [1791293400, 1791379800, 1791466200, 1791552600, 1791811800],
+        "indicators": {
+          "quote": [
+            {
+              "open": [514.4, 517.11, 518.24, 520.78, 522.31],
+              "high": [516.8, 519.51, 520.64, 523.18, 524.71],
+              "low": [513.1, 515.81, 516.94, 519.48, 521.01],
+              "close": [515.2, 517.91, 519.04, 521.58, 523.11],
+              "volume": [41000000, 42300000, 43600000, 44900000, 46200000]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

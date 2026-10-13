@@ -1,14 +1,49 @@
-/** A price observation for one ticker at one point in time. */
-export interface PricePoint {
+/** Whether a price was observed inside the regular trading session (09:30 to close_ts ET). */
+export type Session = 'regular' | 'outside-regular'
+
+/**
+ * One price update in the shape every source is normalized to, mirroring the on-chain
+ * `NormalizedPrice`. The value is `price × 10^expo`; `conf` uses the same scale.
+ */
+export interface NormalizedPrice {
+  ticker: string
+  price: bigint
+  conf: bigint
+  expo: number
+  /** Unix timestamp in seconds. */
+  publishTime: number
+  session: Session
+  /** True only for a source's official daily close. */
+  officialClose: boolean
+}
+
+/** The updates a provider would publish for one ticker's close. */
+export interface SettlementInputs {
+  ticker: string
+  closeTs: number
+  updates: NormalizedPrice[]
+}
+
+/** A daily close used to compute strikes. */
+export interface PreviousClose {
   ticker: string
   /** Price in USD. */
   price: number
-  /** Unix timestamp in seconds. */
-  timestamp: number
+  /** Trading day the close belongs to, `YYYY-MM-DD` in America/New_York. */
+  tradingDay: string
 }
 
-/** A source of stock prices that a relay slot can publish from. */
+/** A source of stock prices that an oracle slot can settle from. */
 export interface PriceProvider {
   readonly name: string
-  getLatestPrice(ticker: string): Promise<PricePoint>
+  /**
+   * The updates for this ticker's close, or null when no valid closing-price shape exists yet
+   * (for example before the regular session has ended).
+   */
+  prepareClose(ticker: string, closeTs: number): Promise<SettlementInputs | null>
+  /**
+   * The close of `previousTradingDay`. Rejects with a `stale` PriceSourceError when the source's
+   * latest close is dated before that day.
+   */
+  previousClose(ticker: string, previousTradingDay: string): Promise<PreviousClose>
 }
