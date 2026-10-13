@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Automation jobs (`feat/automation-jobs`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), as a test worker and a separate implementation worker.
+- **What the AI did:** the test worker wrote 41 red `node:test` tests for the morning
+  market-creation job and the settlement job on a virtual-time clock and an in-memory chain fake,
+  with the `ChainClient` interface. The implementation worker wrote `nextMorningRun`,
+  `runMorningJob` (6:00 to 8:00 AM ET window, capped exponential backoff, 7:30 alert, stale
+  previous close refused), `runSettlementJob` (on-chain discovery, 30 s then staggered 3-minute
+  polling per slot, +15 and +50 alerts, admin finalization from +60, AdminPriceMismatch alert)
+  and the real clock, without changing the tests.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Trading calendar and alert sinks (`feat/calendar-alerts`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), as a test worker and a separate implementation worker.

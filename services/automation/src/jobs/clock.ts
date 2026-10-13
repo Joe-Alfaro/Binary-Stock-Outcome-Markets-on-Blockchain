@@ -9,9 +9,26 @@ export interface Clock {
 /** The real clock: `Date.now()` and `setTimeout`. */
 export const systemClock: Clock = {
   now() {
-    throw new Error('not implemented')
+    return Date.now()
   },
-  sleep() {
-    throw new Error('not implemented')
+  sleep(ms, signal) {
+    return new Promise((resolve) => {
+      if (signal?.aborted) {
+        resolve()
+        return
+      }
+      const onAbort = () => {
+        clearTimeout(timer)
+        resolve()
+      }
+      const timer = setTimeout(
+        () => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        },
+        Math.max(0, ms),
+      )
+      signal?.addEventListener('abort', onAbort, { once: true })
+    })
   },
 }
