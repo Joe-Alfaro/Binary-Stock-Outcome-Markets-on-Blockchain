@@ -80,7 +80,8 @@ live prices. On a local validator the script airdrops SOL to every role key, so 
 needed. `make dev ARGS=--dry-run` prints the steps without running them.
 
 `make gates` runs every quality gate (formatting, lint, type checks, clippy and all test suites).
-`make test` runs only the tests.
+`make test` runs only the tests. `make e2e` runs the Playwright specs locally against a private
+validator and `next dev` with a flag-gated test wallet; it isn't part of the MR pipeline.
 
 ## Devnet funding
 
@@ -203,10 +204,13 @@ change: point a slot at Pyth or Chainlink with `update_config`, set `ORACLE_SLOT
 (`PYTH_ACCESS_TOKEN`, or `CHAINLINK_DATA_STEAMS_USERNAME` and `CHAINLINK_HMAC_SECRET`), and restart
 the worker. Do it outside market hours. [ARCHITECTURE.md §5.6](ARCHITECTURE.md#56-switching-a-slot-to-pyth-or-chainlink)
 lists the steps, feed IDs and stream schema. What exists today: the off-chain Pyth and Chainlink
-normalizers in `packages/price-providers`, tested against sample payloads. What doesn't yet: the
-on-chain adapters. `settle_market` rejects Pyth and Chainlink slots with `InvalidOracleAccount`
-until they're written, and the admin CLI for `update_config` isn't built. So switching today needs
-that code as well as a paid or provisioned account.
+normalizers in `packages/price-providers`, tested against sample payloads, and the on-chain
+adapters. `settle_market` reads a Pyth `PriceUpdateV2` account, and `settle_market_with_reports`
+verifies Data Streams reports through the verifier program; both share one closing-price, finalize
+and outcome path with the relay. On a third-party slot the first settle needs the automation
+authority or the admin. What doesn't yet: the worker only settles through the relay, and the admin
+CLI for `update_config` isn't built. So switching today needs that code as well as a paid or
+provisioned account.
 
 ## Settlement schedule
 
@@ -335,24 +339,29 @@ Every direct dependency in the npm and Cargo manifests, with the reason it's the
 ## Status
 
 Built and tested: both programs (markets, mint and merge, the order book, the four trade paths,
-settlement, the admin fallback and redeem), the shared math in Rust and TypeScript, the SDK trade
-builders, redeem and close-out builders and trading logic, the price sources, the trading
-calendar, alert sinks, morning and settlement jobs, the relay publisher, the ops scripts, and the
-web app (Landing, Markets, Trade, Portfolio and History pages, Phantom and Solflare wallets, live
-book and prices), and demo mode (an admin toggle that lets markets use custom times; otherwise the
-program enforces the regular schedule). The web app trades and redeems through the SDK builders.
-The worker runs the morning job scheduler, the settlement loop, the slot-1 relay (close records
-once a market's `close_ts` passes, and latest prices every 30 s in the session) and a per-minute
-collateral and supply audit that alerts `invariant_failure`. Lifecycle
-integration tests on a local validator cover create, mint, the four trade paths, the relay close,
-settlement, the admin fallback, redeem and both jobs against the real chain client. Close out orders and
-redeem is one transaction unless the wallet has more resting orders than fit in one; then the
-wallet approves each transaction in order.
+settlement, the admin fallback and redeem), the on-chain Pyth and Data Streams price adapters, the
+shared math in Rust and TypeScript, the SDK trade builders, redeem, cancel and close-out builders
+and trading logic, the price sources, the trading calendar, alert sinks, morning and settlement
+jobs, the relay publisher, the ops scripts, and the web app (Landing, Markets, Trade, Portfolio and
+History pages, Phantom and Solflare wallets, live book and prices, and unwinding a resting order or
+a Yes+No position on the Trade page before settlement), and demo mode (an admin toggle that lets
+markets use custom times; otherwise the program enforces the regular schedule). The web app trades,
+unwinds and redeems through the SDK builders. The worker runs the morning job scheduler, the
+settlement loop, the slot-1 relay (close records once a market's `close_ts` passes, and latest
+prices every 30 s in the session) and a per-minute collateral and supply audit that alerts
+`invariant_failure`. It ships both IDLs in `services/automation/idl` (`make ship-idls`), so a
+deploy starts without `target/`. Lifecycle integration tests on a local validator cover create,
+mint, the four trade paths, the relay close, settlement, the admin fallback, redeem and both jobs
+against the real chain client; a validator test measures rent and compute and checks that a vault
+donation can't change payouts. `make dev` runs the whole stack on its own ports, `make demo` fills
+all four trade paths, and `make e2e` drives the web app in a browser. Close out orders and redeem
+is one transaction unless the wallet has more resting orders than fit in one; then the wallet
+approves each transaction in order.
 
 Not finished yet:
 
 - The admin CLI (config updates, propose and finalize admin price, pause).
-- On-chain Pyth and Chainlink adapters (see [Price oracle](#price-oracle)).
+- Worker support for settling through a Pyth or Data Streams slot (see [Price oracle](#price-oracle)).
 - A devnet run of `make demo`, and the first Railway deploy.
 
 ## Risks and limitations
