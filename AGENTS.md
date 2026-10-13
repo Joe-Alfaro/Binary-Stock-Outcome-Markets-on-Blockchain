@@ -8,7 +8,15 @@ built.
 - Branch off `main` for every change: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`.
 - Merge through GitLab merge requests on the `gitlab` remote. `origin` (GitHub) is kept as a
   mirror; don't open pull requests there.
-- `glab` isn't authenticated for the GitLab host, so open MRs with push options:
+- Open MRs with `glab`, setting `GITLAB_HOST` to the host of the `gitlab` remote:
+
+  ```sh
+  git push gitlab <branch>
+  GITLAB_HOST=<gitlab host> glab mr create --source-branch <branch> --target-branch main \
+    --title "<title>" --description "<summary, tests, risks>"
+  ```
+
+  Without `glab`, push options also work:
 
   ```sh
   git push gitlab <branch> \
