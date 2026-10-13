@@ -158,6 +158,18 @@ pub fn handle_merge_pair(ctx: Context<Collateral>, n: u64) -> Result<()> {
     Ok(())
 }
 
+/// Merges `m = min((yes − keep_yes) / UNIT, no / UNIT, max_n)` pairs, where `yes` and `no` are
+/// the user's balances in base units and `m` can be 0. The client passes its Yes balance from
+/// before the transaction as `keep_yes`, so only the Yes this transaction added is merged. Ends
+/// market Buy No and Sell No, whose fill amount isn't known when the transaction is built.
+pub fn handle_merge_pair_up_to(
+    _ctx: Context<Collateral>,
+    _max_n: u64,
+    _keep_yes: u64,
+) -> Result<()> {
+    err!(MeridianError::NotImplemented)
+}
+
 /// R6: the collateral counter is exactly `pairs_outstanding × UNIT`, never the vault balance.
 fn check_collateral(market: &Market) -> Result<()> {
     let expected = market
