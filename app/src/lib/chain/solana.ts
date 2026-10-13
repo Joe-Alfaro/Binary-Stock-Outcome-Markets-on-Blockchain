@@ -512,19 +512,24 @@ class SolanaChainClient implements ChainClient {
   }
 
   async getOpenOrders(owner: string, market: string): Promise<OpenOrder[]> {
-    void owner
-    void market
-    throw new ChainError('Unknown', 'Open orders are not available in this build yet.')
+    const b = await this.balances(new PublicKey(owner), new PublicKey(market))
+    return b.restingOrders.map((o) => ({ ...o, orderId: o.orderId.toString() }))
   }
 
   async buildCancelOrder(request: CancelOrderRequest): Promise<UnsignedTx> {
-    void request
-    throw new ChainError('Unknown', 'Cancel order is not available in this build yet.')
+    const build = this.builders().buildCancelOrder
+    if (!build) throw new ChainError('Unknown', 'Cancel order is not available in this build yet.')
+    const { ctx, height } = await this.closeOutContext(request)
+    return this.wrap(build(ctx, BigInt(request.orderId)), height)
   }
 
   async buildCloseOutPosition(request: MarketOwner): Promise<UnsignedTx[]> {
-    void request
-    throw new ChainError('Unknown', 'Close out position is not available in this build yet.')
+    const build = this.builders().buildCloseOutPosition
+    if (!build) {
+      throw new ChainError('Unknown', 'Close out position is not available in this build yet.')
+    }
+    const { ctx, height } = await this.closeOutContext(request)
+    return build(ctx).transactions.map((tx) => this.wrap(tx, height))
   }
 
   async sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation> {

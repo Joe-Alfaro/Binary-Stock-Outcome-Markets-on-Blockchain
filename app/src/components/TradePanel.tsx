@@ -9,6 +9,7 @@ import { formatCentsAsDollars, shortAddress } from '../lib/format'
 import { useAsync, useTransaction, useWalletKey } from '../lib/hooks'
 import type { TxState } from '../lib/hooks'
 import { useServices } from '../lib/services'
+import { UnwindPanel } from './UnwindPanel'
 
 const ACTIONS: { path: TradePath; label: string }[] = [
   { path: 'BuyYes', label: 'Buy Yes' },
@@ -121,124 +122,129 @@ export function TradePanel({
   }
 
   return (
-    <form className="card trade-panel" aria-labelledby={`${formId}-title`} onSubmit={submit}>
-      <h3 id={`${formId}-title`}>Place an order</h3>
+    <div className="trade-column">
+      <form className="card trade-panel" aria-labelledby={`${formId}-title`} onSubmit={submit}>
+        <h3 id={`${formId}-title`}>Place an order</h3>
 
-      <fieldset className="segmented">
-        <legend>Action</legend>
-        {ACTIONS.map((a) => (
-          <label key={a.path} className="segmented__option">
-            <input
-              type="radio"
-              name={`${formId}-action`}
-              value={a.path}
-              checked={action === a.path}
-              onChange={() => change(() => setAction(a.path))}
-            />
-            <span>{a.label}</span>
-          </label>
-        ))}
-      </fieldset>
+        <fieldset className="segmented">
+          <legend>Action</legend>
+          {ACTIONS.map((a) => (
+            <label key={a.path} className="segmented__option">
+              <input
+                type="radio"
+                name={`${formId}-action`}
+                value={a.path}
+                checked={action === a.path}
+                onChange={() => change(() => setAction(a.path))}
+              />
+              <span>{a.label}</span>
+            </label>
+          ))}
+        </fieldset>
 
-      <fieldset className="segmented">
-        <legend>Order type</legend>
-        {ORDER_TYPES.map((type) => (
-          <label key={type} className="segmented__option">
-            <input
-              type="radio"
-              name={`${formId}-type`}
-              value={type}
-              checked={orderType === type}
-              onChange={() => chooseOrderType(type)}
-            />
-            <span>{type}</span>
-          </label>
-        ))}
-      </fieldset>
+        <fieldset className="segmented">
+          <legend>Order type</legend>
+          {ORDER_TYPES.map((type) => (
+            <label key={type} className="segmented__option">
+              <input
+                type="radio"
+                name={`${formId}-type`}
+                value={type}
+                checked={orderType === type}
+                onChange={() => chooseOrderType(type)}
+              />
+              <span>{type}</span>
+            </label>
+          ))}
+        </fieldset>
 
-      <div className="field-row">
-        <div className="field">
-          <label htmlFor={`${formId}-qty`}>Quantity</label>
-          <input
-            id={`${formId}-qty`}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            value={qtyText}
-            onChange={(e) => change(() => setQtyText(e.target.value))}
-          />
-        </div>
-        {orderType === 'Limit' && (
+        <div className="field-row">
           <div className="field">
-            <label htmlFor={`${formId}-limit`}>Limit price (¢, {side})</label>
+            <label htmlFor={`${formId}-qty`}>Quantity</label>
             <input
-              id={`${formId}-limit`}
+              id={`${formId}-qty`}
               type="number"
               inputMode="numeric"
               min={1}
-              max={99}
               step={1}
-              value={limitText}
-              onChange={(e) => change(() => setLimitText(e.target.value))}
+              value={qtyText}
+              onChange={(e) => change(() => setQtyText(e.target.value))}
             />
           </div>
-        )}
-      </div>
-
-      <div className="payoff">
-        {priceCents !== null && priceCents >= 1 && priceCents <= 99 && (
-          <p className="payoff__line">
-            {buying
-              ? payoffLine({ side, ticker: contract.ticker, strike: contract.strike, priceCents })
-              : `You receive ${formatCentsAsDollars(priceCents)} per ${side} token you sell.`}
-          </p>
-        )}
-        {orderType === 'Market' && quote !== null && (
-          <p className="muted">
-            Market orders fill now at {quote}¢ or better and never rest on the book.
-          </p>
-        )}
-        <p className="payoff__note">{atStrikeNote(contract.ticker, contract.strike)}</p>
-      </div>
-
-      {held && (
-        <p className="muted">
-          You hold {held.yes} Yes and {held.no} No for this strike.
-        </p>
-      )}
-      {problem && <p className="field-error">{problem}</p>}
-      {!owner && <p className="muted">Connect a wallet to place orders.</p>}
-
-      {blocked ? (
-        <div role="alert" className="notice notice--warn">
-          <p>{blocked.message}</p>
-          <button
-            type="button"
-            className="button button--secondary"
-            onClick={() => change(() => setAction(blocked.exitAction))}
-          >
-            {labelOf(blocked.exitAction)}
-          </button>
+          {orderType === 'Limit' && (
+            <div className="field">
+              <label htmlFor={`${formId}-limit`}>Limit price (¢, {side})</label>
+              <input
+                id={`${formId}-limit`}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={99}
+                step={1}
+                value={limitText}
+                onChange={(e) => change(() => setLimitText(e.target.value))}
+              />
+            </div>
+          )}
         </div>
-      ) : (
-        tx.phase === 'failed' && (
-          <div role="alert" className="notice notice--error">
-            <p>{tx.message}</p>
-          </div>
-        )
-      )}
 
-      <button
-        type="submit"
-        className="button button--primary button--wide"
-        disabled={!canPlace || busy}
-      >
-        {busy ? 'Waiting for wallet…' : 'Place order'}
-      </button>
-      <p role="status" aria-live="polite" className="tx-status">
-        {statusText(tx)}
-      </p>
-    </form>
+        <div className="payoff">
+          {priceCents !== null && priceCents >= 1 && priceCents <= 99 && (
+            <p className="payoff__line">
+              {buying
+                ? payoffLine({ side, ticker: contract.ticker, strike: contract.strike, priceCents })
+                : `You receive ${formatCentsAsDollars(priceCents)} per ${side} token you sell.`}
+            </p>
+          )}
+          {orderType === 'Market' && quote !== null && (
+            <p className="muted">
+              Market orders fill now at {quote}¢ or better and never rest on the book.
+            </p>
+          )}
+          <p className="payoff__note">{atStrikeNote(contract.ticker, contract.strike)}</p>
+        </div>
+
+        {held && (
+          <p className="muted">
+            You hold {held.yes} Yes and {held.no} No for this strike.
+          </p>
+        )}
+        {problem && <p className="field-error">{problem}</p>}
+        {!owner && <p className="muted">Connect a wallet to place orders.</p>}
+
+        {blocked ? (
+          <div role="alert" className="notice notice--warn">
+            <p>{blocked.message}</p>
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => change(() => setAction(blocked.exitAction))}
+            >
+              {labelOf(blocked.exitAction)}
+            </button>
+          </div>
+        ) : (
+          tx.phase === 'failed' && (
+            <div role="alert" className="notice notice--error">
+              <p>{tx.message}</p>
+            </div>
+          )
+        )}
+
+        <button
+          type="submit"
+          className="button button--primary button--wide"
+          disabled={!canPlace || busy}
+        >
+          {busy ? 'Waiting for wallet…' : 'Place order'}
+        </button>
+        <p role="status" aria-live="polite" className="tx-status">
+          {statusText(tx)}
+        </p>
+      </form>
+      {owner && held && (
+        <UnwindPanel market={contract.market} owner={owner} held={held} onDone={holdings.reload} />
+      )}
+    </div>
   )
 }

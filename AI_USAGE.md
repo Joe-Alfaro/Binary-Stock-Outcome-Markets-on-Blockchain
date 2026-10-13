@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — Unwind a resting Buy No before settlement (`feat/unwind`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote red SDK, web and validator tests for cancelling a
+  resting order and closing out a Yes+No position before settlement (R28 [G]). The
+  implementation worker wrote `buildCancelOrder` (cancel, then `settle_funds`) and
+  `buildCloseOutPosition` (cancel every resting order, `settle_funds`, then `merge_pair` for the
+  whole pairs the wallet will hold), sharing the in-order packing with the redeem close-out. It
+  wired both into the chain client and app services, and added an unwind panel on the Trade page
+  with Cancel order, Close out position and the wallet USDC balance. It didn't change the tests.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Lifecycle integration tests and the automation chain client (`feat/lifecycle`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

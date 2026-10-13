@@ -14,11 +14,18 @@ const ATA_PROGRAM = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 const SYSTEM_PROGRAM = new PublicKey('11111111111111111111111111111111')
 
 export type Method =
-  'mint_pair' | 'merge_pair_up_to' | 'place_order' | 'cancel_order' | 'settle_funds' | 'redeem'
+  | 'mint_pair'
+  | 'merge_pair'
+  | 'merge_pair_up_to'
+  | 'place_order'
+  | 'cancel_order'
+  | 'settle_funds'
+  | 'redeem'
 
 /** Anchor instruction discriminators: the first 8 bytes of `sha256("global:<method>")`. */
 const DISCRIMINATOR: Record<Method, Buffer> = {
   mint_pair: Buffer.from([19, 149, 94, 110, 181, 186, 33, 107]),
+  merge_pair: Buffer.from([30, 61, 163, 68, 40, 68, 160, 222]),
   merge_pair_up_to: Buffer.from([24, 95, 222, 136, 113, 222, 25, 154]),
   place_order: Buffer.from([51, 194, 155, 175, 109, 130, 96, 106]),
   cancel_order: Buffer.from([95, 129, 237, 240, 8, 49, 223, 132]),
@@ -71,6 +78,16 @@ export function createAccounts(ctx: TxBase, mints: MintName[]): TransactionInstr
   })
 }
 
+export function cancelOrder(ctx: TxBase, orderId: bigint): TransactionInstruction {
+  const m = ctx.market
+  return meridian(
+    ctx,
+    'cancel_order',
+    [readonly(ctx.owner, true), readonly(m.market), writable(m.book)],
+    [u64(orderId)],
+  )
+}
+
 export function settleFunds(ctx: TxBase): TransactionInstruction {
   const m = ctx.market
   return meridian(
@@ -88,6 +105,42 @@ export function settleFunds(ctx: TxBase): TransactionInstruction {
     ],
     [],
   )
+}
+
+/** The packet limit a serialized transaction must fit. */
+const MAX_TX_BYTES = 1232
+
+/** Greedy in-order packing: each transaction takes steps until the next one wouldn't fit. */
+export function pack(ctx: TxBase, steps: TransactionInstruction[]): VersionedTransaction[] {
+  const transactions: VersionedTransaction[] = []
+  let current: TransactionInstruction[] = []
+  let built: VersionedTransaction | null = null
+  for (const step of steps) {
+    const candidate = fitting(ctx, [...current, step])
+    if (candidate) {
+      current.push(step)
+      built = candidate
+      continue
+    }
+    if (!built) throw new RangeError('one close-out step does not fit in a transaction')
+    transactions.push(built)
+    current = [step]
+    built = fitting(ctx, current)
+    if (!built) throw new RangeError('one close-out step does not fit in a transaction')
+  }
+  if (built) transactions.push(built)
+  return transactions
+}
+
+/** The compiled transaction, or null when it exceeds the size limit. */
+function fitting(ctx: TxBase, steps: TransactionInstruction[]): VersionedTransaction | null {
+  try {
+    const tx = compile(ctx, steps)
+    return tx.serialize().length <= MAX_TX_BYTES ? tx : null
+  } catch {
+    // Too many accounts or bytes for the message encoder.
+    return null
+  }
 }
 
 export function meridian(

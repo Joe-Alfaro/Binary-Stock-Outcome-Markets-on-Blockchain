@@ -1,4 +1,4 @@
-import { PositionConstraintError, RedeemError } from '@meridian/sdk'
+import { PositionConstraintError, RedeemError, UnwindError } from '@meridian/sdk'
 
 export type ChainErrorCode =
   'SignatureRejected' | 'InsufficientUsdc' | 'Paused' | 'MarketClosed' | 'Unknown'
@@ -82,7 +82,13 @@ const MESSAGES: Record<Exclude<ChainErrorCode, 'Unknown'>, string> = {
 
 /** The message the trade panel shows for a failed trade (R54). */
 export function tradeErrorMessage(error: unknown): string {
-  if (error instanceof PositionConstraintError || error instanceof RedeemError) return error.message
+  if (
+    error instanceof PositionConstraintError ||
+    error instanceof RedeemError ||
+    error instanceof UnwindError
+  ) {
+    return error.message
+  }
   const chainError = toChainError(error)
   if (chainError.code === 'Unknown') return `The transaction failed: ${chainError.message}`
   return MESSAGES[chainError.code]
