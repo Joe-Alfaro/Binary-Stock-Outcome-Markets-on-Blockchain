@@ -1,3 +1,4 @@
+import { createDemoReplaySource } from '@meridian/price-providers'
 import { assertDemoCluster, assertSafeTarget, guardCluster, type GenesisRpc } from './guard.js'
 import { isEntryPoint, loadDotEnv, runMain } from './lib/cli.js'
 import { explorerTxUrl } from './lib/explorer.js'
@@ -89,8 +90,10 @@ export interface DemoResult {
   settlementDelaySecs: number
 }
 
-/** The ticker the demo trades; the mock relay source has a recorded close for it. */
+/** The ticker the demo trades; the demo replay source has a recorded close for it. */
 export const DEMO_TICKER = 'AAPL'
+/** The trading day of the recorded close the demo relay replays (R44). */
+export const RECORDED_CLOSE_DAY = '2026-10-12'
 /** Seconds from market creation to its demo close_ts, enough for the mint and four trades. */
 const DEMO_CLOSE_LEAD_SECS = 90
 /** Sample markets for `make dev` close later, so there is time to trade in the web app. */
@@ -194,6 +197,14 @@ export function createDryRunClient(): DemoClient {
   }
 }
 
+/**
+ * The demo strike: one dollar over the replayed close, so the market settles No and the No the
+ * trader keeps pays out.
+ */
+export const strikeOver = (price: bigint, expo: number) => price + 10n ** BigInt(-expo)
+
+const dollars = (value: bigint, expo: number) => `$${(Number(value) / 10 ** -expo).toFixed(2)}`
+
 const formatDelta = (delta: WalletBalances) =>
   `yes ${delta.yes}, no ${delta.no}, usdc ${delta.usdc}`
 
@@ -260,6 +271,16 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
   log(
     `Demo market ${DEMO_TICKER} on ${target.cluster}, close_ts ${new Date(closeTs * 1000).toISOString()}`,
   )
+  const [replayed] =
+    (await createDemoReplaySource().prepareClose(DEMO_TICKER, closeTs))?.updates ?? []
+  if (replayed) {
+    const { price, expo } = replayed
+    const strike = dollars(strikeOver(price, expo), expo)
+    log(
+      `Relay replays the recorded ${DEMO_TICKER} close of ${RECORDED_CLOSE_DAY}, ` +
+        `${dollars(price, expo)}, at close_ts; strike ${strike}, so the market settles No`,
+    )
+  }
   const created = await client.createDemoMarket({ ticker: DEMO_TICKER, closeTs })
   await confirm('create', created.signature)
   const { market } = created
