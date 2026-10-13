@@ -137,19 +137,12 @@ function pythSetting(env: NodeJS.ProcessEnv, slotVar: string): PythSlotSetting {
 }
 
 function chainlinkSetting(env: NodeJS.ProcessEnv, slotVar: string): ChainlinkSlotSetting {
-  // Earlier .env files spell it CHAINLINK_DATA_STEAMS_USERNAME; that name still works.
-  const username = env.CHAINLINK_DATA_STREAMS_USERNAME?.trim() || env.CHAINLINK_DATA_STEAMS_USERNAME
-  const values = required(
-    { ...env, CHAINLINK_DATA_STREAMS_USERNAME: username },
-    slotVar,
-    'chainlink',
-    [
-      'CHAINLINK_VERIFIER_PROGRAM_ID',
-      'CHAINLINK_STREAM_IDS',
-      'CHAINLINK_DATA_STREAMS_USERNAME',
-      'CHAINLINK_HMAC_SECRET',
-    ] as const,
-  )
+  const values = required(env, slotVar, 'chainlink', [
+    'CHAINLINK_VERIFIER_PROGRAM_ID',
+    'CHAINLINK_STREAM_IDS',
+    'CHAINLINK_DATA_STREAMS_USERNAME',
+    'CHAINLINK_HMAC_SECRET',
+  ] as const)
   return {
     kind: 'chainlink',
     verifierProgram: programId(

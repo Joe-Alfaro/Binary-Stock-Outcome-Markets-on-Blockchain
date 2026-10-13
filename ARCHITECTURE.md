@@ -590,7 +590,7 @@ NEXT_PUBLIC_MERIDIAN_ORACLE_PROGRAM_ID=
 NEXT_PUBLIC_RELAY_SIGNER_1=    # public key whose LatestPrice accounts the app reads
 ```
 
-The worker still reads the earlier misspelling `CHAINLINK_DATA_STEAMS_USERNAME` when `CHAINLINK_DATA_STREAMS_USERNAME` is unset. The Yahoo source needs no key. `NEXT_PUBLIC_PRICE_API_URL` and `CHAINLINK_CANDLESTICK_API_KEY` are no longer used and should be removed from `.env.example` with the code that reads env vars.
+An earlier `.env` that spells it `CHAINLINK_DATA_STEAMS_USERNAME` must be renamed. The Yahoo source needs no key. `NEXT_PUBLIC_PRICE_API_URL` and `CHAINLINK_CANDLESTICK_API_KEY` are no longer used and should be removed from `.env.example` with the code that reads env vars.
 
 ---
 

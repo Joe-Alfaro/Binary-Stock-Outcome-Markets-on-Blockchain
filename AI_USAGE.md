@@ -2,6 +2,18 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-13 — Env-switched oracle slots in the worker (`feat/slot-config`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 32 red tests for R32 (slot env parsing, the Hermes and
+  Data Streams HTTP clients, settle dispatch by slot kind, env-disabled slots, `startWorker`
+  validation, and a validator test that settles through a Pyth slot). The implementation worker,
+  without changing the tests, added `loadOracleSlotSettings`, the Hermes provider (Bearer token)
+  and Data Streams client (HMAC headers, User-Agent), made the chain client settle each slot by its
+  on-chain kind, kept env-disabled slots out of the settlement job, posted Pyth updates through the
+  receiver SDK in production, and documented the switching steps. Logged the choices as D75.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — On-chain Pyth and Data Streams price adapters (`feat/oracle-adapters`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
