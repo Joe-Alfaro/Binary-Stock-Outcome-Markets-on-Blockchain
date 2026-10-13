@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { Keypair, PublicKey } from '@solana/web3.js'
 import { loadOracleIdl, oraclePdas, priceInput, tickerSeed } from './oracle-client.js'
 import { price } from './test-support.js'
 
-const PROGRAM_ID = new PublicKey('3HDbiFX8iSf7zXfaYmFRPNnKsjUiLvF55rHperUvjjVY')
-const IDL_PATH = new URL('../../../../target/idl/meridian_oracle.json', import.meta.url).pathname
+const repoPath = (path: string) => new URL(`../../../../${path}`, import.meta.url).pathname
+const IDL_PATH = repoPath('target/idl/meridian_oracle.json')
+
+/**
+ * The program's `declare_id!`, the one source of truth for its ID. Program keypairs aren't
+ * committed, so `anchor keys sync` rewrites it per machine and a literal would go stale.
+ */
+function declaredProgramId(): PublicKey {
+  const source = readFileSync(repoPath('programs/meridian_oracle/src/lib.rs'), 'utf8')
+  const id = /declare_id!\("([1-9A-HJ-NP-Za-km-z]+)"\)/.exec(source)?.[1]
+  if (id === undefined) throw new Error('meridian_oracle has no declare_id!')
+  return new PublicKey(id)
+}
+
+const PROGRAM_ID = declaredProgramId()
 
 describe('meridian_oracle client encoding', () => {
   it('pads tickers to the [u8; 8] seed and rejects anything else', () => {
