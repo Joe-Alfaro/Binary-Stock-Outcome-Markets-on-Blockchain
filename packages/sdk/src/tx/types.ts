@@ -1,4 +1,4 @@
-import type { AddressLookupTableAccount, PublicKey } from '@solana/web3.js'
+import type { AddressLookupTableAccount, PublicKey, VersionedTransaction } from '@solana/web3.js'
 import type { Holdings } from '../trading/constraints.js'
 
 /** Every account of one strike market that the trade paths touch. */
@@ -52,4 +52,49 @@ export interface BuyNoOrder {
 export interface SellNoOrder {
   noPriceCents: number
   qty: number
+}
+
+export type SettledOutcome = 'Yes' | 'No'
+
+/** What the redeem builders need. Like `TradeContext`, callers fetch balances first. */
+export interface RedeemContext {
+  /** The wallet: the only signer and the fee payer. */
+  owner: PublicKey
+  market: MarketAccounts
+  /** The settled outcome, or null while the market is not settled yet. */
+  outcome: SettledOutcome | null
+  /** The wallet's Yes and No balances in base units before this transaction. */
+  walletYesBaseUnits: bigint
+  walletNoBaseUnits: bigint
+  recentBlockhash: string
+  /** Optional per-market lookup tables, compiled into the v0 message when given. */
+  lookupTables?: AddressLookupTableAccount[]
+}
+
+/** One of the wallet's resting orders on the market's book. */
+export interface RestingOrder {
+  orderId: bigint
+  side: 'Bid' | 'Ask'
+  priceCents: number
+  /** Remaining whole tokens. */
+  qty: number
+}
+
+/** The wallet's seat in the book: what `settle_funds` would withdraw now, in base units. */
+export interface BookSeat {
+  freeYesBaseUnits: bigint
+  freeUsdcBaseUnits: bigint
+}
+
+export interface CloseOutContext extends RedeemContext {
+  restingOrders: RestingOrder[]
+  /** Null when the wallet has no seat in the book (`settle_funds` would fail with `NoSeat`). */
+  seat: BookSeat | null
+}
+
+/** The close-out transactions, to sign and send in order. */
+export interface CloseOutPlan {
+  transactions: VersionedTransaction[]
+  /** True when the steps did not fit one transaction and were split. */
+  split: boolean
 }
