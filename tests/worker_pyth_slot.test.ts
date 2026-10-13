@@ -245,7 +245,9 @@ describe('worker settles through a Pyth slot switched by update_config and env v
   const automation = Keypair.generate()
   const relay = Keypair.generate()
   const updateAccount = Keypair.generate().publicKey
-  const closeTs = Math.floor(Date.now() / 1000) + CLOSE_IN_SECS
+  // Set when setup starts, not when Mocha loads the file: in the full suite the earlier files run
+  // for minutes between the two.
+  let closeTs: number
   const located: { update: PythCloseUpdate; market: OpenMarket }[] = []
   const pythUpdates: PythUpdateAccounts = {
     async accountsFor(update, market) {
@@ -263,6 +265,7 @@ describe('worker settles through a Pyth slot switched by update_config and env v
   let tickerDay: PublicKey
 
   before(async () => {
+    closeTs = Math.floor(Date.now() / 1000) + CLOSE_IN_SECS
     const meridianId = builtIdl('meridian').address
     const oracleIdl = builtIdl('meridian_oracle')
     const [rangeStart] = PORTS.range.split('-').map(Number)

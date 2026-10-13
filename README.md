@@ -374,12 +374,14 @@ markets use custom times; otherwise the program enforces the regular schedule). 
 unwinds and redeems through the SDK builders. The worker runs the morning job scheduler, the
 settlement loop, the slot-1 relay (close records once a market's `close_ts` passes, and latest
 prices every 30 s in the session) and a per-minute collateral and supply audit that alerts
-`invariant_failure`. It ships both IDLs in `services/automation/idl` (`make ship-idls`), so a
+`invariant_failure`. Each oracle slot settles through the provider its env names
+(`ORACLE_SLOT_1` and `ORACLE_SLOT_2`: the relay, Pyth through the receiver program, or Data Streams
+through the verifier), with no code change to switch. It ships both IDLs in `services/automation/idl` (`make ship-idls`), so a
 deploy starts without `target/`. Lifecycle integration tests on a local validator cover create,
 mint, the four trade paths, the relay close, settlement, the admin fallback, redeem and both jobs
 against the real chain client; a validator test measures rent and compute and checks that a vault
-donation can't change payouts. `make dev` runs the whole stack on its own ports, `make demo` fills
-all four trade paths, and `make e2e` drives the web app in a browser. Close out orders and redeem
+donation can't change payouts. `make dev` runs the whole stack on its own ports, `make demo` replays the recorded AAPL close of
+2026-10-12 and fills all four trade paths, and `make e2e` drives the web app in a browser. Close out orders and redeem
 is one transaction unless the wallet has more resting orders than fit in one; then the wallet
 approves each transaction in order.
 
