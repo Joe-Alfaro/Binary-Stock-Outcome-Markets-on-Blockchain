@@ -25,6 +25,40 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   market-maker exposure view is built from the same replay (R52). Removed the stub lint
   suppressions and logged its implementation choices in the local decisions log.
 
+## 2026-10-12 — Automation jobs (`feat/automation-jobs`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), as a test worker and a separate implementation worker.
+- **What the AI did:** the test worker wrote 41 red `node:test` tests for the morning
+  market-creation job and the settlement job on a virtual-time clock and an in-memory chain fake,
+  with the `ChainClient` interface. The implementation worker wrote `nextMorningRun`,
+  `runMorningJob` (6:00 to 8:00 AM ET window, capped exponential backoff, 7:30 alert, stale
+  previous close refused), `runSettlementJob` (on-chain discovery, 30 s then staggered 3-minute
+  polling per slot, +15 and +50 alerts, admin finalization from +60, AdminPriceMismatch alert)
+  and the real clock, without changing the tests.
+- **Human review:** pending MR review.
+
+## 2026-10-12 — Trading calendar and alert sinks (`feat/calendar-alerts`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), as a test worker and a separate implementation worker.
+- **What the AI did:** the test worker wrote red `node:test` suites for the NYSE calendar (holidays,
+  early closes, DST, previous trading day, input validation) and the alert sinks, with interface
+  stubs. The implementation worker filled in `services/automation/src/calendar` (checked-in 2026
+  and 2027 holiday and early-close data, `America/New_York` session times) and
+  `services/automation/src/alerts` (log sink, JSON webhook sink with a timeout, env-based sink
+  selection, an alerter that contains sink failures) without changing the tests.
+- **Human review:** pending MR review.
+
+## 2026-10-13 — Settlement math (`feat/math`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), as a TDD pair: one session wrote the red tests and
+  shared fixtures, a second implemented them.
+- **What the AI did:** implemented the closing-price rule (validation, official close, exact
+  timestamp and exact-rational interpolation), the payout rule and the strike ladder in the
+  `no_std` crate `crates/meridian-math`, and the bigint TypeScript twin in
+  `packages/sdk/src/math`. Both pass the shared fixtures and the property tests (10,000 proptest
+  cases in Rust, 2,000 seeded cases in TS). Tests were not changed by the implementation.
+- **Human review:** pending MR review.
+
 ## 2026-10-12 — Price providers (`feat/providers`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
@@ -66,6 +100,8 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   implementation worker wrote the `meridian_oracle` handlers and the account constraints (PDA
   seeds, `init` for the write-once records, `init_if_needed` for the latest-price account, the
   upgrade-authority check, the registry checks) without changing the tests.
+- **Human review:** pending MR review.
+
 - **Human review:** pending MR review.
 
 ## 2026-10-13 — Architecture update (`docs/architecture-update`)
