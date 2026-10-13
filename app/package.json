@@ -5,8 +5,8 @@
   "description": "Next.js web app",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --import ./tests/support/dom.ts --test 'tests/**/*.test.ts' 'tests/**/*.test.tsx'",
@@ -25,6 +25,10 @@
     "jsdom": "^27.0.1"
   },
   "dependencies": {
+    "@solana/wallet-adapter-base": "^0.9.28",
+    "@solana/wallet-adapter-phantom": "^0.9.30",
+    "@solana/wallet-adapter-solflare": "^0.6.34",
+    "@solana/web3.js": "^1.99.0",
     "next": "^16.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

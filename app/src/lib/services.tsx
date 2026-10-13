@@ -29,3 +29,8 @@ export function useServices(): Services {
   if (!services) throw new Error('useServices must be used inside ServicesProvider')
   return services
 }
+
+/** The services if a provider is mounted, else `null`. */
+export function useOptionalServices(): Services | null {
+  return useContext(ServicesContext)
+}

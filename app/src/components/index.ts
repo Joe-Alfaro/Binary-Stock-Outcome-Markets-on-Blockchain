@@ -1,3 +1,4 @@
+export * from './AppProviders'
 export * from './HistoryPage'
 export * from './LandingPage'
 export * from './MarketsPage'
