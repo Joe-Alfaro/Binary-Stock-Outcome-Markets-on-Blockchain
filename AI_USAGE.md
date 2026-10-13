@@ -2,6 +2,17 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-12 — Price providers (`feat/providers`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote red tests and hand-written fixtures for the Yahoo
+  chart source, the `mock` source, `RELAY_<n>_SOURCE` selection, the relay confidence rule and
+  the Pyth and Chainlink v11 normalizers. The implementation worker wrote the code to pass them
+  without changing the tests, and added tests for the 429 fallback from query1 to query2 and
+  the backoff across calls. Yahoo answered 429 to every capture attempt, so the fixtures are
+  still hand-written.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — Architecture update (`docs/architecture-update`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), running as an implementation worker.
