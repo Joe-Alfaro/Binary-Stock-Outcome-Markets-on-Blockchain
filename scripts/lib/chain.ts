@@ -595,6 +595,14 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
       return chain.send(await instructions(), [trader])
     },
 
+    async quote() {
+      throw new Error('not implemented')
+    },
+
+    async balances() {
+      throw new Error('not implemented')
+    },
+
     async publishRelayClose(market) {
       const info = marketInfo(market)
       const [relay] = chain.keys().relaySigners

@@ -1,6 +1,7 @@
 import type { CommandRunner } from './deploy-devnet.js'
 import { DEFAULT_LOCAL_RPC_PORT, guardCluster } from './guard.js'
 import { isEntryPoint, loadDotEnv, runMain, spawnRunner } from './lib/cli.js'
+import type { ProgramKeyDirs } from './program-keys.js'
 
 export type DevStepId =
   | 'validator'
@@ -34,6 +35,8 @@ export interface DevOptions {
   /** Resolves once the validator answers on the RPC URL. Skipped when not given. */
   waitForRpc?: (rpcUrl: string) => Promise<void>
   log?: (line: string) => void
+  /** Where the program keypairs live; the web app gets the IDs deployed from them. */
+  programKeyDirs?: ProgramKeyDirs
 }
 
 /** The default validator ports, which CI and other checkouts on this machine use. */

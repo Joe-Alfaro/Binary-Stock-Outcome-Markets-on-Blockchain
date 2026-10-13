@@ -1,7 +1,13 @@
+import { Keypair } from '@solana/web3.js'
 import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, it } from 'node:test'
 import { planDev, runDev, type DevStep, type DevStepId } from './dev.js'
 import type { CommandRunner } from './deploy-devnet.js'
+import { base58Secret } from './lib/test-support.js'
+import { ensureProgramKeypairs } from './program-keys.js'
 
 const REQUIRED_ORDER: DevStepId[] = [
   'validator',
@@ -120,5 +126,112 @@ describe('runDev (R60, R45)', () => {
       /mainnet/i,
     )
     assert.deepEqual(commands, [])
+  })
+})
+
+/** The ports CI's validator holds (Anchor.toml [test.validator]) and the default RPC block. */
+const CI_RESERVED = (port: number) =>
+  port === 8899 || port === 8900 || port === 9900 || (port >= 9600 && port <= 9650)
+
+function portRange(args: string[], flag: string) {
+  const index = args.indexOf(flag)
+  assert.ok(index >= 0, `missing ${flag} in ${args.join(' ')}`)
+  const match = /^(\d+)-(\d+)$/.exec(args[index + 1] ?? '')
+  assert.ok(match, `${flag} takes <low>-<high>, got ${args[index + 1]}`)
+  return { low: Number(match[1]), high: Number(match[2]) }
+}
+
+// R60 (validation round 1): without --gossip-port and --dynamic-port-range the validator binds
+// gossip 8000 and a dynamic range up to 10000, overlapping CI's reserved 9600-9650.
+describe('planDev validator ports (R60)', () => {
+  it('pins the gossip port outside every reserved port', () => {
+    const validator = step(planDev({}).steps, 'validator')
+    const gossip = argAfter(validator.args, '--gossip-port')
+    assert.ok(Number.isInteger(gossip), `gossip port ${gossip}`)
+    assert.ok(!CI_RESERVED(gossip), `gossip port ${gossip} is reserved`)
+    assert.notEqual(gossip, 8000, 'gossip must not take the shared default 8000')
+  })
+
+  it('pins a dynamic port range that stays clear of the reserved block', () => {
+    const validator = step(planDev({}).steps, 'validator')
+    const { low, high } = portRange(validator.args, '--dynamic-port-range')
+    assert.ok(low < high, `range ${low}-${high}`)
+    // Agave needs room for its TPU, TVU and repair sockets.
+    assert.ok(high - low + 1 >= 25, `range ${low}-${high} is too narrow`)
+    const overlapsReserved = Array.from({ length: high - low + 1 }, (_, i) => low + i).some(
+      CI_RESERVED,
+    )
+    assert.ok(!overlapsReserved, `range ${low}-${high} overlaps a reserved port`)
+  })
+
+  it('keeps gossip and the dynamic range off the RPC, WebSocket and faucet ports', () => {
+    const validator = step(planDev({ LOCAL_VALIDATOR_RPC_PORT: '8973' }).steps, 'validator')
+    const rpc = argAfter(validator.args, '--rpc-port')
+    const faucet = argAfter(validator.args, '--faucet-port')
+    const gossip = argAfter(validator.args, '--gossip-port')
+    const { low, high } = portRange(validator.args, '--dynamic-port-range')
+    const taken = [rpc, rpc + 1, faucet]
+    assert.ok(!taken.includes(gossip), `gossip ${gossip} clashes with ${taken.join(', ')}`)
+    taken.forEach((port) =>
+      assert.ok(port < low || port > high, `range ${low}-${high} includes port ${port}`),
+    )
+  })
+})
+
+/** A runner that records every command with the env it was given. */
+function envRecordingRunner() {
+  const runs: { command: string; args: string[]; env: Record<string, string> }[] = []
+  const runner: CommandRunner = {
+    async run(command, args, options) {
+      runs.push({ command, args, env: { ...(options?.env ?? {}) } })
+      return { stdout: '' }
+    },
+  }
+  return { runner, runs }
+}
+
+// R60 (validation round 1): the web step passed only the RPC URL, so the app fell back to built
+// or literal program IDs and had no relay signer for live prices.
+describe('runDev web step configuration (R60)', () => {
+  function devFixture() {
+    const root = mkdtempSync(join(tmpdir(), 'meridian-dev-'))
+    const dirs = { keysDir: join(root, 'keys'), deployDir: join(root, 'deploy') }
+    const ids = ensureProgramKeypairs(dirs)
+    const relay = Keypair.generate()
+    const relaySecret = base58Secret(relay)
+    return { dirs, ids, relay, relaySecret }
+  }
+
+  async function webRun() {
+    const fixture = devFixture()
+    const { runner, runs } = envRecordingRunner()
+    await runDev({
+      env: { RELAY_SIGNER_1_KEYPAIR: fixture.relaySecret },
+      runner,
+      programKeyDirs: fixture.dirs,
+      log: () => {},
+    })
+    const web = runs.find((run) => run.args.join(' ') === 'run dev -w app')
+    assert.ok(web, `web step never ran: ${runs.map((run) => run.command).join(', ')}`)
+    return { ...fixture, web }
+  }
+
+  it('passes the program IDs the run just deployed to the web app', async () => {
+    const { ids, web } = await webRun()
+    assert.equal(web.env.NEXT_PUBLIC_MERIDIAN_PROGRAM_ID, ids.meridian.toString())
+    assert.equal(web.env.NEXT_PUBLIC_MERIDIAN_ORACLE_PROGRAM_ID, ids.meridianOracle.toString())
+  })
+
+  it("passes relay signer 1's public key, never its secret, to the web app", async () => {
+    const { relay, relaySecret, web } = await webRun()
+    assert.equal(web.env.NEXT_PUBLIC_RELAY_SIGNER_1, relay.publicKey.toBase58())
+    Object.entries(web.env).forEach(([name, value]) =>
+      assert.ok(!value.includes(relaySecret), `${name} leaks the relay signer secret`),
+    )
+  })
+
+  it('keeps the local RPC URL for the web app', async () => {
+    const { web } = await webRun()
+    assert.equal(web.env.NEXT_PUBLIC_SOLANA_RPC_URL, planDev({}).rpcUrl)
   })
 })

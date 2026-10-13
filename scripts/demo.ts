@@ -8,14 +8,32 @@ export const TRADE_PATHS: readonly TradePath[] = ['buy-yes', 'sell-yes', 'buy-no
 
 export type Commitment = 'processed' | 'confirmed' | 'finalized'
 
+/** A wallet's balances in one market, in base units (6 decimals for USDC, Yes and No). */
+export interface WalletBalances {
+  usdc: bigint
+  yes: bigint
+  no: bigint
+}
+
+/** The demo's two wallets: the trader runs the four paths, the counterparty quotes them. */
+export interface DemoBalances {
+  trader: WalletBalances
+  counterparty: WalletBalances
+}
+
 /** Chain calls the demo makes. Each send returns its signature; `confirm` waits for it. */
 export interface DemoClient extends GenesisRpc {
   createDemoMarket(params: {
     ticker: string
     closeTs: number
   }): Promise<{ market: string; signature: string }>
+  /** The counterparty mints the pairs it quotes from. */
   mintPair(market: string, quantity: number): Promise<string>
+  /** The counterparty rests the order that the trader's `path` fills against. */
+  quote(market: string, path: TradePath, quantity: number): Promise<string>
   trade(market: string, path: TradePath, quantity: number): Promise<string>
+  /** Both wallets' balances in the market. */
+  balances(market: string): Promise<DemoBalances>
   /** Publishes the replayed recorded close through the relay signer. */
   publishRelayClose(market: string): Promise<string>
   settle(market: string): Promise<string>
@@ -37,6 +55,8 @@ export interface DemoTransaction {
   signature: string
   explorerUrl: string
   confirmMs: number
+  /** Both wallets' balances once the step confirmed. */
+  balances?: DemoBalances
 }
 
 export interface DemoResult {
@@ -79,8 +99,14 @@ export function createDryRunClient(): DemoClient {
     async mintPair() {
       return signature('mint')
     },
+    async quote() {
+      throw new Error('not implemented')
+    },
     async trade(_market, path) {
       return signature(path)
+    },
+    async balances() {
+      throw new Error('not implemented')
     },
     async publishRelayClose() {
       return signature('publish')
