@@ -1,3 +1,4 @@
+export { createAnchorChainClient, type AnchorChainClientOptions } from './anchor.js'
 export type {
   ChainClient,
   ChainPrice,
