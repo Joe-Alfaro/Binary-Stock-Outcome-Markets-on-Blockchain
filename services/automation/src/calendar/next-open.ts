@@ -42,6 +42,16 @@ function nextOpenDate(now: number): string | null {
   return nextTradingDay(today)
 }
 
+/** "today", "tomorrow" or the weekday of `date`'s open, as seen from `now` in New York. */
+function reopenDay(now: number, date: string): string {
+  const today = newYorkDate.format(new Date(now * 1000))
+  if (date === today) return 'today'
+  const weekday = (ts: number) => newYorkWeekday.format(ts * 1000)
+  // Over a weekend the tag always names the day: Sunday evening reads "Reopens Mon".
+  if (date === dayAfter(today) && !WEEKEND.has(weekday(now))) return 'tomorrow'
+  return weekday(tradingDayTimes(date).tradingOpenTs)
+}
+
 /** Runs a calendar lookup, mapping "outside the calendar data" to null like `chartSession`. */
 function withinCalendar<T>(lookup: () => T): T | null {
   try {
@@ -76,13 +86,6 @@ export function reopenLabel(now: number): string | null {
   return withinCalendar(() => {
     const date = nextOpenDate(now)
     if (date === null) return null
-    const today = newYorkDate.format(new Date(now * 1000))
-    const weekday = (ts: number) => newYorkWeekday.format(ts * 1000)
-    const openTs = tradingDayTimes(date).tradingOpenTs
-    // Over a weekend the tag always names the day: Sunday evening reads "Reopens Mon".
-    const weekend = WEEKEND.has(weekday(now))
-    const day =
-      date === today ? 'today' : date === dayAfter(today) && !weekend ? 'tomorrow' : weekday(openTs)
-    return `Reopens ${day} 9:30 AM ET`
+    return `Reopens ${reopenDay(now, date)} 9:30 AM ET`
   })
 }
