@@ -42,5 +42,71 @@
     "capturedAt": "2026-10-13T05:41:42Z",
     "sha256": "1edef4f5a4b8726780da570619a5ffe0dd284a0096ea601b01bb8727f3f45757",
     "note": "HTTP 429 body, byte for byte, from a request with a browser User-Agent."
+  },
+  "yahoo/MSFT-2026-10-09-1d.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/MSFT?interval=1d&period1=1791207000&period2=1791576000",
+    "sha256": "0fa4a042b5f4a8575eba8c6b9eed0dde03d4422f0535ce9b3a62ae679e202959",
+    "note": "Written by hand in the chart API v8 schema: five daily bars to the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/GOOGL-2026-10-09-1m.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/GOOGL?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "8341f0652dd6370ef0474e2e9bc051432668a933c51a96fa9a6060413276a633",
+    "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/GOOGL-2026-10-09-1d.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/GOOGL?interval=1d&period1=1791207000&period2=1791576000",
+    "sha256": "a1988f3777b9985e192aa1c8082317537fa5d6e71d2b75a985ce70fccb2bae7c",
+    "note": "Written by hand in the chart API v8 schema: five daily bars to the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/AMZN-2026-10-09-1m.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/AMZN?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "ec4d70b6b45d5eee6c007dde613eac08c6686979e9b6297493395804b5327ab3",
+    "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/AMZN-2026-10-09-1d.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/AMZN?interval=1d&period1=1791207000&period2=1791576000",
+    "sha256": "3bf94385a33f883fe5cff2c5d5adc1e29b58aad5d9d4cf290c79e40d132734dd",
+    "note": "Written by hand in the chart API v8 schema: five daily bars to the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/NVDA-2026-10-09-1m.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/NVDA?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "a060a9c467bf3a2629ddca4b51d7a0c52a52ab231887a14aab3229887c33d0f9",
+    "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/NVDA-2026-10-09-1d.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/NVDA?interval=1d&period1=1791207000&period2=1791576000",
+    "sha256": "c9ff99216bf30833e08c8ed2dd1f991f2f9db209f4ac800f094e558d553049f2",
+    "note": "Written by hand in the chart API v8 schema: five daily bars to the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/META-2026-10-09-1m.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/META?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "9a5407c80c77e7d92138ddb572c4cf66c61b5cb9980450a0b608eb4f77922dd7",
+    "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/META-2026-10-09-1d.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/META?interval=1d&period1=1791207000&period2=1791576000",
+    "sha256": "33623d7ffc3083605d1476bfdddc55d86c0229a6f73237d8844cac7d6a02125e",
+    "note": "Written by hand in the chart API v8 schema: five daily bars to the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/TSLA-2026-10-09-1m.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1m&period1=1791575100&period2=1791576900&includePrePost=true",
+    "sha256": "5e1316389b40337d32aa5356858195f6828577c081d671eb1c5865bb4cfd1193",
+    "note": "Written by hand in the chart API v8 schema: one-minute bars around the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
+  },
+  "yahoo/TSLA-2026-10-09-1d.json": {
+    "origin": "hand-written",
+    "recordFrom": "https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1d&period1=1791207000&period2=1791576000",
+    "sha256": "d9a72b2a9cac2df5c2973f3c05a06b2f0c252492aed73cef42309cc5e5957915",
+    "note": "Written by hand in the chart API v8 schema: five daily bars to the 2026-10-09 close. Every capture attempt was rate-limited (HTTP 429)."
   }
 }

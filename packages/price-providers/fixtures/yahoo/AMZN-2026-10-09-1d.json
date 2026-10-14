@@ -1,0 +1,98 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "AMZN",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "firstTradeDate": 863703000,
+          "hasPrePostMarketData": true,
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "exchangeTimezoneName": "America/New_York",
+          "longName": "Amazon.com, Inc.",
+          "shortName": "Amazon.com, Inc.",
+          "priceHint": 2,
+          "regularMarketPrice": 251.86,
+          "regularMarketTime": 1791576000,
+          "chartPreviousClose": 247.2,
+          "scale": 3,
+          "currentTradingPeriod": {
+            "pre": {
+              "timezone": "EDT",
+              "start": 1791547200,
+              "end": 1791567000,
+              "gmtoffset": -14400
+            },
+            "regular": {
+              "timezone": "EDT",
+              "start": 1791567000,
+              "end": 1791590400,
+              "gmtoffset": -14400
+            },
+            "post": {
+              "timezone": "EDT",
+              "start": 1791590400,
+              "end": 1791604800,
+              "gmtoffset": -14400
+            }
+          },
+          "dataGranularity": "1d",
+          "range": "5d"
+        },
+        "timestamp": [
+          1791207000,
+          1791293400,
+          1791379800,
+          1791466200,
+          1791552600
+        ],
+        "indicators": {
+          "quote": [
+            {
+              "open": [
+                247.51,
+                248.81,
+                248.26,
+                249.75,
+                251.04
+              ],
+              "high": [
+                249.97,
+                251.27,
+                250.72,
+                252.22,
+                253.5
+              ],
+              "low": [
+                246.17,
+                247.48,
+                246.92,
+                248.42,
+                249.7
+              ],
+              "close": [
+                248.33,
+                249.63,
+                249.08,
+                250.58,
+                251.86
+              ],
+              "volume": [
+                65600000,
+                67680000,
+                69760000,
+                71840000,
+                73920000
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

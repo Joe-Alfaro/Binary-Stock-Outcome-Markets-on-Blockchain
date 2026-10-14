@@ -1,0 +1,98 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "GOOGL",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "firstTradeDate": 1092922200,
+          "hasPrePostMarketData": true,
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "exchangeTimezoneName": "America/New_York",
+          "longName": "Alphabet Inc.",
+          "shortName": "Alphabet Inc.",
+          "priceHint": 2,
+          "regularMarketPrice": 338.42,
+          "regularMarketTime": 1791576000,
+          "chartPreviousClose": 332.16,
+          "scale": 3,
+          "currentTradingPeriod": {
+            "pre": {
+              "timezone": "EDT",
+              "start": 1791547200,
+              "end": 1791567000,
+              "gmtoffset": -14400
+            },
+            "regular": {
+              "timezone": "EDT",
+              "start": 1791567000,
+              "end": 1791590400,
+              "gmtoffset": -14400
+            },
+            "post": {
+              "timezone": "EDT",
+              "start": 1791590400,
+              "end": 1791604800,
+              "gmtoffset": -14400
+            }
+          },
+          "dataGranularity": "1d",
+          "range": "5d"
+        },
+        "timestamp": [
+          1791207000,
+          1791293400,
+          1791379800,
+          1791466200,
+          1791552600
+        ],
+        "indicators": {
+          "quote": [
+            {
+              "open": [
+                332.57,
+                334.32,
+                333.58,
+                335.59,
+                337.32
+              ],
+              "high": [
+                335.88,
+                337.63,
+                336.89,
+                338.9,
+                340.63
+              ],
+              "low": [
+                330.78,
+                332.53,
+                331.78,
+                333.8,
+                335.52
+              ],
+              "close": [
+                333.67,
+                335.43,
+                334.68,
+                336.7,
+                338.42
+              ],
+              "volume": [
+                53300000,
+                54990000,
+                56680000,
+                58370000,
+                60060000
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}
