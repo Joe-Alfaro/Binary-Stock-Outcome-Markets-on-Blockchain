@@ -28,7 +28,7 @@ closing-price rule and the test strategy. This README covers running it and the 
 | `crates/meridian-math`     | `no_std` Rust crate with the closing-price rule, payout rule and strike ladder                                                        |
 | `packages/sdk`             | TypeScript twin of the math, the four trade-path transaction builders, the No view of the book, P&L replay and the mainnet guard      |
 | `packages/price-providers` | Price sources: the Yahoo chart API, a `mock` source that replays fixtures, and Pyth and Chainlink normalizers                         |
-| `services/automation`      | Worker: trading calendar, morning job, settlement job, relay publisher, alert sinks and a `/healthz` endpoint                         |
+| `services/automation`      | Worker: trading calendar, morning job, settlement job, relay publisher, alert sinks, `/healthz` and the chart's intraday price route  |
 | `app`                      | Next.js web app                                                                                                                       |
 | `scripts`                  | `make dev`, `make deploy-devnet`, `make demo`, the config bootstrap and the mainnet guard                                             |
 
@@ -126,6 +126,13 @@ checks (`/` and `/healthz`). Both services have been built and started locally t
 Railway builds from a clean checkout without `target/`, so the worker ships both program IDLs in
 `services/automation/idl/`; run `make ship-idls` after changing a program's interface.
 The first live Railway deploy waits for the user's confirmation, so there is no public URL yet.
+
+**Markets chart.** Each Markets card charts its ticker's price for today's session while the market
+is open, else the last complete session. The browser reads the series only from the worker's
+`GET /prices/intraday/<ticker>` on the health server, at `NEXT_PUBLIC_PRICE_API_URL`. The worker
+proxies the relay source (Yahoo 1-minute bars, or a synthetic offline series in mock mode) and
+caches each ticker for 60 s, so there is at most one upstream request per ticker per minute. The
+chart is a plain SVG line with no charting dependency.
 
 ## Lifecycle demo
 

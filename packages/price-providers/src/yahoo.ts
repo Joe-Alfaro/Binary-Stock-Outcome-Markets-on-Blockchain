@@ -10,6 +10,8 @@ import {
   newYorkMidnight,
 } from './time.js'
 import type {
+  IntradayPoint,
+  IntradayPriceProvider,
   LivePriceProvider,
   NormalizedPrice,
   PreviousClose,
@@ -239,6 +241,13 @@ export function latestPrice(
   return toNormalized(ticker, price, 0, time, false)
 }
 
+/** The 1-minute bar closes with `fromTs <= t <= toTs`, oldest first, skipping empty minutes. */
+export function intradayCloses(chart: YahooChart, fromTs: number, toTs: number): IntradayPoint[] {
+  return barsOf(chart)
+    .filter((bar) => bar.close !== null && bar.start >= fromTs && bar.start <= toTs)
+    .map((bar) => ({ t: bar.start, price: bar.close as number }))
+}
+
 /** Daily closes whose session has ended by `now`, oldest first. */
 export function completedDailyCloses(chart: YahooChart, now: number) {
   return barsOf(chart)
@@ -303,7 +312,7 @@ async function readResponse(host: string, response: Response): Promise<FetchResu
 /** Relay source backed by the keyless Yahoo Finance chart API. */
 export function createYahooSource(
   options: YahooSourceOptions = {},
-): PriceProvider & LivePriceProvider {
+): PriceProvider & LivePriceProvider & IntradayPriceProvider {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const now = options.now ?? (() => Math.floor(Date.now() / 1000))
@@ -388,6 +397,16 @@ export function createYahooSource(
       // The daily interval keeps the response small; the meta block carries the live quote.
       const body = await getChart(ticker, { interval: '1d', range: '1d' })
       return latestPrice(parseChart(body, ticker), ticker, now())
+    },
+
+    async intraday(ticker, fromTs, toTs) {
+      // Without includePrePost the chart API returns regular-session bars only.
+      const body = await getChart(ticker, {
+        interval: '1m',
+        period1: String(fromTs),
+        period2: String(toTs),
+      })
+      return intradayCloses(parseChart(body, ticker), fromTs, toTs)
     },
   }
 }

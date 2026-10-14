@@ -1,4 +1,5 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, type Server, type ServerResponse } from 'node:http'
+import type { IntradayService } from './intraday/index.js'
 
 export interface HealthSnapshot {
   status: 'ok'
@@ -36,17 +37,49 @@ export function createHealthState(): HealthState {
   }
 }
 
-/** HTTP server for the Railway health check: `GET /healthz` returns the snapshot as JSON. */
-export function createHealthServer(state: HealthState): Server {
+export interface HealthServerOptions {
+  /** Serves `GET /prices/intraday/<ticker>`, the Markets chart's series (R66). */
+  intraday?: IntradayService
+}
+
+const INTRADAY_PATH = /^\/prices\/intraday\/([^/]+)$/
+
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
+  response.writeHead(status, { 'content-type': 'application/json', ...headers })
+  response.end(JSON.stringify(body))
+}
+
+/** Answers `GET /prices/intraday/<ticker>` from the cached service; any origin may read it. */
+async function serveIntraday(intraday: IntradayService, ticker: string, response: ServerResponse) {
+  const cors = { 'access-control-allow-origin': '*' }
+  const result = await intraday.get(ticker).catch(() => null)
+  if (result === null) return sendJson(response, 503, { error: 'unavailable' }, cors)
+  if (!result.ok) return sendJson(response, result.status, { error: result.error }, cors)
+  sendJson(response, 200, result.series, cors)
+}
+
+/**
+ * HTTP server for the Railway health check: `GET /healthz` returns the snapshot as JSON. With an
+ * intraday service it also serves the Markets chart's read-only price route.
+ */
+export function createHealthServer(state: HealthState, options: HealthServerOptions = {}): Server {
   return createServer((request, response) => {
     const path = new URL(request.url ?? '/', 'http://localhost').pathname
     if (request.method === 'GET' && path === '/healthz') {
-      response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify(state.snapshot()))
+      sendJson(response, 200, state.snapshot())
       return
     }
-    response.writeHead(404, { 'content-type': 'application/json' })
-    response.end(JSON.stringify({ error: 'not found' }))
+    const intradayMatch = INTRADAY_PATH.exec(path)
+    if (request.method === 'GET' && options.intraday && intradayMatch) {
+      void serveIntraday(options.intraday, intradayMatch[1] ?? '', response)
+      return
+    }
+    sendJson(response, 404, { error: 'not found' })
   })
 }
 

@@ -7,6 +7,7 @@ import { formatUsd } from '../lib/format'
 import { useAsync, useLatestPrices, useNow } from '../lib/hooks'
 import { formatPublishTime, isStale } from '../lib/prices'
 import { useServices } from '../lib/services'
+import { PriceChart } from './PriceChart'
 
 function activeCount(markets: readonly ContractSummary[], ticker: Ticker): number {
   return markets.filter((m) => m.ticker === ticker && m.status === 'Open').length
@@ -32,6 +33,7 @@ function TickerCard({
         {stale && <span className="badge badge--warn">Stale</span>}
       </header>
       <p className="ticker-card__price">{price ? formatUsd(price.price) : '—'}</p>
+      <PriceChart ticker={ticker} />
       <p className="muted">
         {price ? <>As of {formatPublishTime(price.publishTs)}</> : 'Waiting for the first price'}
       </p>
@@ -47,7 +49,10 @@ function TickerCard({
   )
 }
 
-/** The 7 tickers with live price, publish time, stale marker and active contracts (R47, R50). */
+/**
+ * The 7 tickers with live price, an intraday chart, publish time, stale marker and active
+ * contracts (R47, R50, R66).
+ */
 export function MarketsPage() {
   const { chain } = useServices()
   const prices = useLatestPrices()

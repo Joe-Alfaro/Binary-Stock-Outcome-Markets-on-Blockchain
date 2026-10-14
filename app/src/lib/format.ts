@@ -81,3 +81,37 @@ export function formatEt(unixSeconds: number, options: { date?: boolean } = {}):
   if (!options.date) return time
   return `${part('month')} ${part('day')}, ${time}`
 }
+
+/** A signed percentage with two decimals and a real minus sign: `+0.62%`, `−1.25%`, `0.00%`. */
+export function formatPercentChange(percent: number): string {
+  const rounded = Math.abs(percent).toFixed(2)
+  if (Number(rounded) === 0) return `${rounded}%`
+  return `${percent > 0 ? '+' : MINUS}${rounded}%`
+}
+
+const sessionDay = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'UTC',
+  month: 'short',
+  day: 'numeric',
+})
+
+/** A `YYYY-MM-DD` trading day as `Oct 9`. */
+export function formatSessionDate(date: string): string {
+  const [year = 1970, month = 1, day = 1] = date.split('-').map(Number)
+  return sessionDay.format(new Date(Date.UTC(year, month - 1, day)))
+}
+
+const etMinute = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+})
+
+/** Time of day to the minute in America/New_York: `10:20 AM`. */
+export function formatEtMinute(unixSeconds: number): string {
+  const parts = etMinute.formatToParts(new Date(unixSeconds * 1000))
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? ''
+  return `${part('hour')}:${part('minute')} ${part('dayPeriod').toUpperCase()}`
+}
