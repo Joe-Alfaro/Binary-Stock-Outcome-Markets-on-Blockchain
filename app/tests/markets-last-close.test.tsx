@@ -82,6 +82,31 @@ async function waitForText(card: HTMLElement, pattern: RegExp) {
   }
 }
 
+/** The innermost element whose text matches `pattern`, or null. */
+function leaf(card: HTMLElement, pattern: RegExp): Element | null {
+  const matches = [...card.querySelectorAll('*')].filter((el) => pattern.test(el.textContent ?? ''))
+  return matches.find((el) => !matches.some((other) => other !== el && el.contains(other))) ?? null
+}
+
+/** The card's chart: the figure, or its empty state while loading or unavailable. */
+function chart(card: HTMLElement): Element {
+  const found =
+    within(card).queryByRole('figure') ??
+    within(card).queryByText(/^(Chart unavailable|Loading chart…)$/)
+  assert.ok(found, 'the card has a chart or its empty state')
+  return found
+}
+
+/** Whether `a` comes before `b` in document order: above it in the card's single column. */
+function precedes(a: Element, b: Element): boolean {
+  return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+}
+
+/** The card's Closed pill in the header. */
+function closedPill(card: HTMLElement): HTMLElement {
+  return within(card).getByRole('status', { name: /^Closed\b/ })
+}
+
 // R69: while closed the price line shows the last session's close, labelled "Last close".
 describe('R69 Last close on Markets cards while closed', () => {
   it("a closed card on a fresh chain shows 'Last close' with the worker's session close", async () => {
@@ -91,6 +116,11 @@ describe('R69 Last close on Markets cards while closed', () => {
     const card = await aaplCard()
     await waitForText(card, /Last close/)
     assert.match(cardText(card), /\$187\.25/, 'the session close is shown')
+    const label = leaf(card, /Last close/)
+    const price = leaf(card, /\$187\.25/)
+    assert.ok(label && price)
+    assert.ok(precedes(label, chart(card)), "'Last close' is the big price line, above the chart")
+    assert.ok(precedes(price, chart(card)), 'the close is the big price line, above the chart')
   })
 
   it("a closed card on a fresh chain shows no 'Waiting for the first price' and no dash", async () => {
@@ -111,6 +141,53 @@ describe('R69 Last close on Markets cards while closed', () => {
     await waitForText(card, /Last close/)
     assert.ok(within(card).getByText('$186.90'), 'the on-chain price is the price line')
     assert.doesNotMatch(cardText(card), /\$187\.25/, 'the worker close is not shown as the price')
+  })
+})
+
+// R69 layout: the pill says only "Closed"; the reopen text is the status line under the chart.
+describe('R69 closed card layout', () => {
+  it("the header pill says only 'Closed', with no reopen text", async () => {
+    const harness = freshChain(TUESDAY_EVENING)
+    harness.intraday.series.set('AAPL', AAPL_TUESDAY)
+    renderWith(harness, <MarketsPage />)
+    const card = await aaplCard()
+    const pill = closedPill(card)
+    assert.equal(pill.textContent?.trim(), 'Closed')
+    const header = within(card).getByRole('heading', { name: 'AAPL' }).closest('header')
+    assert.ok(header?.contains(pill), 'the pill stays in the header')
+  })
+
+  it('the reopen text is the status line below the chart, outside the header', async () => {
+    const harness = freshChain(TUESDAY_EVENING)
+    harness.intraday.series.set('AAPL', AAPL_TUESDAY)
+    renderWith(harness, <MarketsPage />)
+    const card = await aaplCard()
+    await within(card).findByRole('figure')
+    const reopen = within(card).getByText('Reopens tomorrow 9:30 AM ET')
+    assert.equal(reopen.closest('header') !== null, false, 'not in the header')
+    assert.ok(precedes(chart(card), reopen), 'below the chart')
+  })
+
+  it("shows the reopen line and no 'Waiting for the first price' even with no price at all", async () => {
+    // A fresh chain and an unreachable worker: no on-chain price and no session close.
+    renderWith(freshChain(TUESDAY_EVENING), <MarketsPage />)
+    const card = await aaplCard()
+    await within(card).findByText('Chart unavailable')
+    const reopen = within(card).getByText('Reopens tomorrow 9:30 AM ET')
+    assert.ok(precedes(chart(card), reopen), 'below the chart')
+    assert.equal(within(card).queryByText(/Waiting for the first price/), null)
+  })
+
+  it('every closed card has the pill and the reopen line under its chart', async () => {
+    renderWith(freshChain(TUESDAY_EVENING), <MarketsPage />)
+    await aaplCard()
+    for (const ticker of TICKERS) {
+      const card = screen.getByRole('article', { name: ticker })
+      await within(card).findByText('Chart unavailable')
+      assert.equal(closedPill(card).textContent?.trim(), 'Closed', `${ticker} pill`)
+      const reopen = within(card).getByText('Reopens tomorrow 9:30 AM ET')
+      assert.ok(precedes(chart(card), reopen), `${ticker} reopen line below the chart`)
+    }
   })
 })
 
