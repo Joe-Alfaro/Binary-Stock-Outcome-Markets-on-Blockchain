@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import anchor from '@anchor-lang/core'
+import { PriceSourceError, createMockSource } from '@meridian/price-providers'
 import { Keypair } from '@solana/web3.js'
 import { FakeChainClient } from './chain/fake.js'
 import { createHealthState } from './health.js'
@@ -168,8 +169,8 @@ describe('startWorker oracle slot configuration (R32)', () => {
 })
 
 // The worker's stop() must reach the morning job. Started between 6:00 and 8:00 AM ET on a trading
-// day, the job runs at once, and its retries (here: no reachable RPC, mock source without most
-// recordings) must end on stop() instead of at the 8:00 deadline.
+// day, the job runs at once, and its retries (here: no reachable RPC, and a source whose previous
+// close fails for every ticker but AAPL) must end on stop() instead of at the 8:00 deadline.
 describe('startWorker stop during the morning window', () => {
   const key = (keypair = Keypair.generate()) => JSON.stringify([...keypair.secretKey])
   const env = {
@@ -183,6 +184,20 @@ describe('startWorker stop during the morning window', () => {
   const SIX_OH_THREE = Date.UTC(2026, 9, 13, 10, 3)
   const MORNING_JOB_LINES = /previous close fetch failed|create_strike_market/
   const realDelay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  /** The mock source, except that previous closes fail for every ticker but AAPL. */
+  function sourceFailingPreviousCloses(now: () => number) {
+    const mock = createMockSource({ now })
+    return {
+      name: mock.name,
+      prepareClose: mock.prepareClose.bind(mock),
+      latest: mock.latest.bind(mock),
+      previousClose: (ticker: string, previousTradingDay: string) =>
+        ticker === 'AAPL'
+          ? mock.previousClose(ticker, previousTradingDay)
+          : Promise.reject(new PriceSourceError('http', `no previous close for ${ticker}`)),
+    }
+  }
 
   /**
    * Waits in real time until a line matches `pattern`, then until none is logged for 2.5 s: every
@@ -210,6 +225,7 @@ describe('startWorker stop during the morning window', () => {
         clock,
         log: (line) => lines.push(String(line)),
         alertSinks: [],
+        source: sourceFailingPreviousCloses(() => Math.floor(clock.now() / 1000)),
       })
       // Start the morning job, then let its failed creates (real RPC calls) come back: it is now
       // in its create and previous-close backoffs.
