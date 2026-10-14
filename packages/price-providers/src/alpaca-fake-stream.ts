@@ -237,7 +237,8 @@ export async function waitUntil(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (!condition()) {
-    if (Date.now() > deadline) throw new Error(`timed out after ${timeoutMs} ms waiting for ${label}`)
+    if (Date.now() > deadline)
+      throw new Error(`timed out after ${timeoutMs} ms waiting for ${label}`)
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
 }

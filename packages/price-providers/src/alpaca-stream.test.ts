@@ -4,11 +4,7 @@ import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
 import { createAlpacaSource, createAlpacaStream } from './index.js'
 import type { AlpacaSource, AlpacaStream, AlpacaStreamEvent } from './index.js'
-import {
-  startFakeAlpacaStream,
-  transcriptDataBatches,
-  waitUntil,
-} from './alpaca-fake-stream.js'
+import { startFakeAlpacaStream, transcriptDataBatches, waitUntil } from './alpaca-fake-stream.js'
 import type { AlpacaBatch, FakeAlpacaStream } from './alpaca-fake-stream.js'
 import {
   KEYS,
@@ -65,7 +61,11 @@ function messages(server: FakeAlpacaStream, action: string) {
 
 /** Waits until the client subscribed and has had time to read the batches sent after it. */
 async function ready(client: AlpacaStream, events: AlpacaStreamEvent[], subscribed = 1) {
-  await waitUntil(() => count(events, 'subscribed') >= subscribed && client.ready, 2000, 'subscribed')
+  await waitUntil(
+    () => count(events, 'subscribed') >= subscribed && client.ready,
+    2000,
+    'subscribed',
+  )
   await new Promise((resolve) => setTimeout(resolve, 50))
 }
 
@@ -200,7 +200,10 @@ describe('Alpaca stream: reconnect with bounded backoff (R67)', () => {
     const delays = events
       .filter((event) => event.type === 'reconnecting')
       .map((event) => (event.type === 'reconnecting' ? event.delayMs : 0))
-    assert.ok(delays.every((delay) => delay > 0 && delay <= RECONNECT.maxMs), `${delays}`)
+    assert.ok(
+      delays.every((delay) => delay > 0 && delay <= RECONNECT.maxMs),
+      `${delays}`,
+    )
     assert.ok((delays[0] ?? 0) < (delays.at(-1) ?? 0), `delays grow: ${delays}`)
     assert.ok(Math.max(...delays) >= RECONNECT.maxMs / 2, `delays reach the cap: ${delays}`)
     assert.equal(client.ready, false)

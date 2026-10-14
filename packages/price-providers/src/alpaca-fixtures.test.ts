@@ -17,7 +17,8 @@ interface Provenance {
   sha256: string
 }
 
-const ALPACA_URL = /^(https:\/\/data\.alpaca\.markets\/v2\/stocks\/|wss:\/\/stream\.data\.alpaca\.markets\/v2\/)/
+const ALPACA_URL =
+  /^(https:\/\/data\.alpaca\.markets\/v2\/stocks\/|wss:\/\/stream\.data\.alpaca\.markets\/v2\/)/
 const CREDENTIAL_PARAM = /key|secret|token|apca/i
 
 const files = readdirSync(new URL('alpaca/', FIXTURES)).map((name) => `alpaca/${name}`)

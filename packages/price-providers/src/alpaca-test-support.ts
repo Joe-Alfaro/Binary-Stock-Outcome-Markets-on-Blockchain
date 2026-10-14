@@ -131,7 +131,9 @@ export function alpacaRoute(spec: AlpacaRouteSpec): Route {
       const snapshots = spec.snapshots
       return jsonResponse(
         Object.fromEntries(
-          symbols.filter((symbol) => snapshots[symbol]).map((symbol) => [symbol, snapshots[symbol]]),
+          symbols
+            .filter((symbol) => snapshots[symbol])
+            .map((symbol) => [symbol, snapshots[symbol]]),
         ),
       )
     }
@@ -163,7 +165,9 @@ export function lastTrades(recording: StreamTranscript): Map<string, { p: number
     .filter((entry) => entry.dir === 'server' && Array.isArray(entry.message))
     .flatMap((entry) => entry.message as Record<string, unknown>[])
     .filter((message) => message.T === 't')
-    .forEach((message) => last.set(String(message.S), { p: Number(message.p), t: String(message.t) }))
+    .forEach((message) =>
+      last.set(String(message.S), { p: Number(message.p), t: String(message.t) }),
+    )
   return last
 }
 

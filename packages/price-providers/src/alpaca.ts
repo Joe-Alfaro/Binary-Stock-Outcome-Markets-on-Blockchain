@@ -1,9 +1,5 @@
 import { notImplemented } from './errors.js'
-import type {
-  IntradayPriceProvider,
-  LivePriceProvider,
-  PriceProvider,
-} from './types.js'
+import type { IntradayPriceProvider, LivePriceProvider, PriceProvider } from './types.js'
 
 /** Alpaca's market-data REST API. */
 export const ALPACA_REST_URL = 'https://data.alpaca.markets'

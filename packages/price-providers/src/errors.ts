@@ -1,11 +1,5 @@
 export type PriceSourceErrorCode =
-  | 'timeout'
-  | 'rate-limited'
-  | 'malformed'
-  | 'http'
-  | 'not-found'
-  | 'stale'
-  | 'unauthorized'
+  'timeout' | 'rate-limited' | 'malformed' | 'http' | 'not-found' | 'stale' | 'unauthorized'
 
 /** Every failure a price source reports, so callers can decide whether to retry or alert. */
 export class PriceSourceError extends Error {

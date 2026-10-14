@@ -66,7 +66,8 @@ function dailyClose(ticker: string, day: string): number {
 function barsRequests(calls: RecordedCall[], timeframe: string) {
   return calls.filter(
     (call) =>
-      call.url.pathname === '/v2/stocks/bars' && call.url.searchParams.get('timeframe') === timeframe,
+      call.url.pathname === '/v2/stocks/bars' &&
+      call.url.searchParams.get('timeframe') === timeframe,
   )
 }
 
@@ -74,7 +75,10 @@ async function rejection(promise: Promise<unknown>): Promise<PriceSourceError> {
   try {
     await promise
   } catch (error) {
-    assert.ok(error instanceof PriceSourceError, `expected a PriceSourceError, got ${String(error)}`)
+    assert.ok(
+      error instanceof PriceSourceError,
+      `expected a PriceSourceError, got ${String(error)}`,
+    )
     return error
   }
   return assert.fail('expected a rejection')
@@ -87,9 +91,7 @@ function assertNoSecrets(text: string) {
 
 describe('Alpaca fixtures (R67)', () => {
   it('the SIP daily close of 2026-10-13 is the official closing print', () => {
-    const official = fixtures
-      .closeTrades()
-      .trades.AAPL?.find((trade) => trade.c.includes('M'))
+    const official = fixtures.closeTrades().trades.AAPL?.find((trade) => trade.c.includes('M'))
     assert.ok(official, 'the trades fixture holds the market-center official close')
     assert.equal(dailyClose('AAPL', '2026-10-13'), official.p)
   })
@@ -193,7 +195,9 @@ describe('Alpaca settlement inputs around close_ts (R67, R33, D23)', () => {
       assert.ok(official.publishTime >= CLOSE_TS, 'stamped at or after close')
       assert.ok(official.publishTime < CLOSE_TS + 300, 'stamped within the close window')
       const daily = barsRequests(calls, '1Day')
-      assert.ok(daily.length > 0 && daily.every((call) => call.url.searchParams.get('feed') === 'sip'))
+      assert.ok(
+        daily.length > 0 && daily.every((call) => call.url.searchParams.get('feed') === 'sip'),
+      )
     })
   })
 
@@ -207,7 +211,9 @@ describe('Alpaca settlement inputs around close_ts (R67, R33, D23)', () => {
 
   it('without a daily bar, pairs the last regular minute with the closing bar open (D23)', async () => {
     const daily = withoutBars(fixtures.daily(), (ts) => ts >= unixOf('2026-10-13T00:00:00Z'))
-    const { source, calls } = setup(fullRoute({ bars: { '1Day:sip': daily, '1Min:sip': fixtures.closeSip() } }))
+    const { source, calls } = setup(
+      fullRoute({ bars: { '1Day:sip': daily, '1Min:sip': fixtures.closeSip() } }),
+    )
 
     const inputs = await source.prepareClose('AAPL', CLOSE_TS)
 
@@ -241,17 +247,16 @@ describe('Alpaca settlement inputs around close_ts (R67, R33, D23)', () => {
 
   it('never stamps an update past the closing bar', async () => {
     const daily = withoutBars(fixtures.daily(), (ts) => ts >= unixOf('2026-10-13T00:00:00Z'))
-    const { source } = setup(alpacaRoute({ bars: { '1Day:sip': daily, '1Min:sip': fixtures.closeSip() } }))
+    const { source } = setup(
+      alpacaRoute({ bars: { '1Day:sip': daily, '1Min:sip': fixtures.closeSip() } }),
+    )
     const inputs = await source.prepareClose('MSFT', CLOSE_TS)
     assert.ok(inputs)
     inputs.updates.forEach((update) => assert.ok(update.publishTime <= CLOSE_TS + 1))
   })
 
   it('falls back to IEX while SIP is refused, and never calls that an official close', async () => {
-    const { source, calls } = setup(
-      fullRoute({ sipRefused: true }),
-      CLOSE_TS + 5 * MINUTE,
-    )
+    const { source, calls } = setup(fullRoute({ sipRefused: true }), CLOSE_TS + 5 * MINUTE)
 
     const inputs = await source.prepareClose('AAPL', CLOSE_TS)
 
@@ -305,17 +310,17 @@ describe('Alpaca intraday 1-minute series (R67, R66)', () => {
   })
 
   it('drops after-hours bars from a window that runs past the close', async () => {
-    const { source } = setup(alpacaRoute({ bars: { '1Min:sip': fixtures.closeSip() } }), NEXT_MORNING)
+    const { source } = setup(
+      alpacaRoute({ bars: { '1Min:sip': fixtures.closeSip() } }),
+      NEXT_MORNING,
+    )
     const points = await source.intraday('AAPL', CLOSE_TS - 15 * MINUTE, CLOSE_TS + 15 * MINUTE)
     assert.equal(points.length, 15)
     assert.equal(points.at(-1)?.t, CLOSE_TS - MINUTE)
   })
 
   it('uses IEX for the last 15 minutes, which the free plan refuses on SIP', async () => {
-    const { source, calls } = setup(
-      fullRoute({ sipRefused: true }),
-      CLOSE_TS + 5 * MINUTE,
-    )
+    const { source, calls } = setup(fullRoute({ sipRefused: true }), CLOSE_TS + 5 * MINUTE)
 
     const points = await source.intraday('AAPL', CLOSE_TS - 15 * MINUTE, CLOSE_TS)
 
@@ -332,7 +337,10 @@ describe('Alpaca intraday 1-minute series (R67, R66)', () => {
     const pages = [bars.slice(0, 200), bars.slice(200)]
     const { source, calls } = setup((url) => {
       const page = url.searchParams.get('page_token') === 'p2' ? 1 : 0
-      return jsonResponse({ bars: { AAPL: pages[page] }, next_page_token: page === 0 ? 'p2' : null })
+      return jsonResponse({
+        bars: { AAPL: pages[page] },
+        next_page_token: page === 0 ? 'p2' : null,
+      })
     }, NEXT_MORNING)
 
     const points = await source.intraday('AAPL', OPEN_TS, CLOSE_TS)
@@ -379,18 +387,21 @@ describe('Alpaca HTTP 429 handling with bounded backoff (R67)', () => {
 
   it('never backs off longer than 10 minutes, however many 429s in a row', async () => {
     const { source, calls, clock } = setup(limited(), NEXT_MORNING)
-    const perCall = await Array.from({ length: 10 }).reduce<Promise<number[]>>(
-      async (previous) => {
-        const counts = await previous
-        const before = calls.length
-        await rejection(source.previousClose('AAPL', '2026-10-13'))
-        clock.now += 10 * MINUTE + 1
-        return [...counts, calls.length - before]
-      },
-      Promise.resolve([]),
+    const perCall = await Array.from({ length: 10 }).reduce<Promise<number[]>>(async (previous) => {
+      const counts = await previous
+      const before = calls.length
+      await rejection(source.previousClose('AAPL', '2026-10-13'))
+      clock.now += 10 * MINUTE + 1
+      return [...counts, calls.length - before]
+    }, Promise.resolve([]))
+    assert.ok(
+      perCall.every((count) => count >= 1),
+      `every call after the backoff asks again: ${perCall}`,
     )
-    assert.ok(perCall.every((count) => count >= 1), `every call after the backoff asks again: ${perCall}`)
-    assert.ok(perCall.every((count) => count <= 3), `at most 3 requests per call: ${perCall}`)
+    assert.ok(
+      perCall.every((count) => count <= 3),
+      `at most 3 requests per call: ${perCall}`,
+    )
   })
 
   it('recovers once the API answers again', async () => {
@@ -447,7 +458,9 @@ describe('Alpaca auth failure and network errors (R67)', () => {
   it('times out a request that never answers', async () => {
     const hang: typeof fetch = (_input, init) =>
       new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError')),
+        )
       })
     const source = createAlpacaSource({
       ...KEYS,
@@ -467,7 +480,10 @@ describe('Alpaca auth failure and network errors (R67)', () => {
   })
 
   it('rejects bars of the wrong shape as malformed', async () => {
-    const { source } = setup(() => jsonResponse({ bars: { AAPL: [{ t: 'yesterday', c: 'x' }] } }), NEXT_MORNING)
+    const { source } = setup(
+      () => jsonResponse({ bars: { AAPL: [{ t: 'yesterday', c: 'x' }] } }),
+      NEXT_MORNING,
+    )
     const error = await rejection(source.intraday('AAPL', OPEN_TS, CLOSE_TS))
     assert.equal(error.code, 'malformed')
   })

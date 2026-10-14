@@ -104,14 +104,20 @@ describe('Alpaca source selection (R67)', () => {
 
   it('names the missing variable without printing the one that is set', () => {
     assert.throws(
-      () => createRelaySource({ RELAY_1_SOURCE: 'alpaca', ALPACA_API_KEY: ALPACA_KEYS.ALPACA_API_KEY }),
+      () =>
+        createRelaySource({ RELAY_1_SOURCE: 'alpaca', ALPACA_API_KEY: ALPACA_KEYS.ALPACA_API_KEY }),
       (error: unknown) =>
         error instanceof Error &&
         /ALPACA_API_SECRET/.test(error.message) &&
         !error.message.includes(ALPACA_KEYS.ALPACA_API_KEY),
     )
     assert.throws(
-      () => createRelaySource({ RELAY_1_SOURCE: 'alpaca', ALPACA_API_KEY: '  ', ALPACA_API_SECRET: '' }),
+      () =>
+        createRelaySource({
+          RELAY_1_SOURCE: 'alpaca',
+          ALPACA_API_KEY: '  ',
+          ALPACA_API_SECRET: '',
+        }),
       /ALPACA_API_KEY/,
     )
   })
