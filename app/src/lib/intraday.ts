@@ -38,11 +38,32 @@ export function createIntradayClient(
   baseUrl: string | undefined,
   fetchImpl: typeof fetch = (...args) => fetch(...args),
 ): IntradayClient {
+  const root = baseUrl?.replace(/\/+$/, '')
   return {
     async get(ticker) {
-      throw new Error(
-        `intraday client not implemented (${ticker}, ${baseUrl}, ${typeof fetchImpl})`,
-      )
+      if (!root) throw new Error('NEXT_PUBLIC_PRICE_API_URL is not set')
+      const response = await fetchImpl(`${root}/prices/intraday/${encodeURIComponent(ticker)}`)
+      const body: unknown = await response.json().catch(() => null)
+      if (!response.ok) {
+        const code = isRecord(body) && typeof body.error === 'string' ? body.error : 'error'
+        throw new Error(`price worker answered ${response.status} ${code}`)
+      }
+      if (!isRecord(body) || !Array.isArray(body.points)) {
+        throw new Error('price worker sent a malformed series')
+      }
+      return body as unknown as IntradaySeries
     },
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/** The series' change since the session's open, in percent, or null with no points. */
+export function changeSinceOpen(series: IntradaySeries): number | null {
+  const first = series.points[0]?.price
+  const last = series.points.at(-1)?.price
+  if (first === undefined || last === undefined || first === 0) return null
+  return ((last - first) / first) * 100
 }

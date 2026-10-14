@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { LatestPrice, Ticker, UnsignedTx } from './chain'
 import { toChainError, tradeErrorMessage } from './chain'
+import { INTRADAY_REFRESH_MS } from './intraday'
+import type { IntradaySeries } from './intraday'
 import { useServices, useTxConfirmations } from './services'
 
 /** The connected wallet's public key, or `null`. Re-renders on connect and disconnect. */
@@ -96,6 +98,40 @@ export function useLatestPrices(): ReadonlyMap<Ticker, LatestPrice> {
     }
   }, [chain])
   return prices
+}
+
+export type IntradayState =
+  { status: 'loading' } | { status: 'ready'; series: IntradaySeries } | { status: 'error' }
+
+/**
+ * The Markets chart's series for `ticker` from the worker (R66), re-read every
+ * `INTRADAY_REFRESH_MS` so an open session stays current and a closed one picks up the next open.
+ * A failed refresh keeps the last good series; with none, the state is `error`.
+ */
+export function useIntraday(ticker: Ticker): IntradayState {
+  const { intraday } = useServices()
+  const [state, setState] = useState<IntradayState>({ status: 'loading' })
+  useEffect(() => {
+    let active = true
+    const refresh = () => {
+      intraday
+        .get(ticker)
+        .then((series) => {
+          if (active) setState({ status: 'ready', series })
+        })
+        .catch(() => {
+          if (active)
+            setState((current) => (current.status === 'ready' ? current : { status: 'error' }))
+        })
+    }
+    refresh()
+    const poll = setInterval(refresh, INTRADAY_REFRESH_MS)
+    return () => {
+      active = false
+      clearInterval(poll)
+    }
+  }, [intraday, ticker])
+  return state
 }
 
 export type AsyncState<T> =

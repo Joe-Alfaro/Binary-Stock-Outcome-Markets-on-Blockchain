@@ -1,5 +1,5 @@
 import { relayConfidence } from './confidence.js'
-import { PriceSourceError, notImplemented } from './errors.js'
+import { PriceSourceError } from './errors.js'
 import type { PriceSourceErrorCode } from './errors.js'
 import { isRecord, malformed } from './parse.js'
 import {
@@ -10,6 +10,7 @@ import {
   newYorkMidnight,
 } from './time.js'
 import type {
+  IntradayPoint,
   IntradayPriceProvider,
   LivePriceProvider,
   NormalizedPrice,
@@ -240,6 +241,13 @@ export function latestPrice(
   return toNormalized(ticker, price, 0, time, false)
 }
 
+/** The 1-minute bar closes with `fromTs <= t <= toTs`, oldest first, skipping empty minutes. */
+export function intradayCloses(chart: YahooChart, fromTs: number, toTs: number): IntradayPoint[] {
+  return barsOf(chart)
+    .filter((bar) => bar.close !== null && bar.start >= fromTs && bar.start <= toTs)
+    .map((bar) => ({ t: bar.start, price: bar.close as number }))
+}
+
 /** Daily closes whose session has ended by `now`, oldest first. */
 export function completedDailyCloses(chart: YahooChart, now: number) {
   return barsOf(chart)
@@ -392,7 +400,13 @@ export function createYahooSource(
     },
 
     async intraday(ticker, fromTs, toTs) {
-      return notImplemented(ticker, fromTs, toTs)
+      // Without includePrePost the chart API returns regular-session bars only.
+      const body = await getChart(ticker, {
+        interval: '1m',
+        period1: String(fromTs),
+        period2: String(toTs),
+      })
+      return intradayCloses(parseChart(body, ticker), fromTs, toTs)
     },
   }
 }

@@ -1,4 +1,6 @@
+import { PriceSourceError } from '@meridian/price-providers'
 import type { IntradayPoint, IntradayPriceProvider } from '@meridian/price-providers'
+import { chartSession } from '../calendar/chart-session.js'
 
 /** At most one upstream request per ticker per this many seconds, successful or not (R66). */
 export const INTRADAY_CACHE_SECS = 60
@@ -36,10 +38,57 @@ export interface IntradayService {
   get(ticker: string): Promise<IntradayResult>
 }
 
+interface CacheEntry {
+  fetchedAt: number
+  result: Promise<IntradayResult>
+}
+
+const UNAVAILABLE: IntradayResult = { ok: false, status: 503, error: 'unavailable' }
+
+function failureOf(error: unknown): IntradayResult {
+  if (error instanceof PriceSourceError && error.code === 'rate-limited') {
+    return { ok: false, status: 503, error: 'rate-limited' }
+  }
+  return UNAVAILABLE
+}
+
 export function createIntradayService(options: IntradayServiceOptions): IntradayService {
+  const { source, now } = options
+  const tickers = new Set(options.tickers)
+  const cache = new Map<string, CacheEntry>()
+
+  async function fetchSeries(ticker: string, at: number): Promise<IntradayResult> {
+    const session = chartSession(at)
+    if (session === null) return UNAVAILABLE
+    try {
+      const points = await source.intraday(ticker, session.openTs, session.endTs)
+      return {
+        ok: true,
+        series: {
+          ticker,
+          live: session.live,
+          sessionDate: session.date,
+          openTs: session.openTs,
+          endTs: session.endTs,
+          earlyClose: session.earlyClose,
+          points: points.filter((p) => p.t >= session.openTs && p.t <= session.endTs),
+        },
+      }
+    } catch (error) {
+      return failureOf(error)
+    }
+  }
+
   return {
     async get(ticker) {
-      throw new Error(`intraday service not implemented (${ticker}, ${options.tickers.length})`)
+      if (!tickers.has(ticker)) return { ok: false, status: 404, error: 'unknown-ticker' }
+      const at = now()
+      const cached = cache.get(ticker)
+      if (cached && at - cached.fetchedAt < INTRADAY_CACHE_SECS) return cached.result
+      // Cache the pending promise so concurrent requests share one upstream call.
+      const result = fetchSeries(ticker, at)
+      cache.set(ticker, { fetchedAt: at, result })
+      return result
     },
   }
 }

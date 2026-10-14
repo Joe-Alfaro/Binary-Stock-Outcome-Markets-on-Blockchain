@@ -1,7 +1,7 @@
 import { createDemoReplaySource } from './demo-replay.js'
 import { createMockSource } from './mock.js'
 import { DEFAULT_RELAY_SOURCE, RELAY_SOURCE_NAMES, isRelaySourceName } from './sources.js'
-import type { LivePriceProvider, PriceProvider } from './types.js'
+import type { IntradayPriceProvider, LivePriceProvider, PriceProvider } from './types.js'
 import { createYahooSource } from './yahoo.js'
 import type { YahooSourceOptions } from './yahoo.js'
 
@@ -14,7 +14,7 @@ export function createRelaySource(
   env: Record<string, string | undefined>,
   slot: 1 | 2 = 1,
   yahooOptions: YahooSourceOptions = {},
-): PriceProvider & LivePriceProvider {
+): PriceProvider & LivePriceProvider & IntradayPriceProvider {
   const variable = `RELAY_${slot}_SOURCE`
   const name = env[variable]?.trim() || DEFAULT_RELAY_SOURCE
   if (!isRelaySourceName(name)) {
