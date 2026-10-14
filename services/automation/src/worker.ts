@@ -234,6 +234,8 @@ export function startWorker(
   const { signal } = controller
   const shared = { chain: withScanHealth(chain, health, clock), alerter, clock, log }
   const source = createRelaySource(env, 1, { now: () => Math.floor(clock.now() / 1000) })
+  // The alpaca source's websocket opens on the first live tick and would keep the process alive.
+  signal.addEventListener('abort', () => source.close?.())
   const oracle = createAnchorOracleClient({
     connection,
     signer,
