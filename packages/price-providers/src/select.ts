@@ -3,12 +3,14 @@ import { createDemoReplaySource } from './demo-replay.js'
 import { createMockSource } from './mock.js'
 import { DEFAULT_RELAY_SOURCE, RELAY_SOURCE_NAMES, isRelaySourceName } from './sources.js'
 import type { RelaySourceName } from './sources.js'
-import type { LivePriceProvider, PriceProvider } from './types.js'
+import type { IntradayPriceProvider, LivePriceProvider, PriceProvider } from './types.js'
 import { createYahooSource } from './yahoo.js'
 import type { YahooSourceOptions } from './yahoo.js'
 
 /** A relay source; the alpaca one holds a websocket that `close` shuts. */
-export type RelaySource = PriceProvider & LivePriceProvider & { close?(): void }
+export type RelaySource = PriceProvider &
+  LivePriceProvider &
+  IntradayPriceProvider & { close?(): void }
 
 function hasAlpacaKeys(env: Record<string, string | undefined>): boolean {
   return Boolean(env.ALPACA_API_KEY?.trim() && env.ALPACA_API_SECRET?.trim())

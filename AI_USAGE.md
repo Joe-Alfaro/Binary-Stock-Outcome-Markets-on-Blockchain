@@ -16,6 +16,31 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   `ARCHITECTURE.md` and `.env.example`.
 - **Human review:** pending MR review.
 
+## 2026-10-13 — Intraday price chart on Markets cards (`feat/markets-chart`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker wrote 45 red tests for R66 (session selection with an
+  injected clock in a non-ET zone, the worker's intraday route and its 60 s cache and 429
+  handling, the Yahoo and mock series, the app client and the card chart). The implementation
+  worker, without changing the tests, wrote `chartSession` on the trading calendar, the Yahoo
+  1-minute `intraday` series and an offline synthetic series for the mock and demo-replay
+  sources, the cached `createIntradayService` behind `GET /prices/intraday/<ticker>` on the health
+  server (wired in `main.ts` with its own relay source), the app's `createIntradayClient` and a
+  dependency-free SVG line chart on each Markets card with a session label, signed change,
+  dashed open line, hover readout and a text alternative.
+- **Human review:** pending MR review.
+
+## 2026-10-13 — MVP integration branch (`integration/mvp`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as orchestrator and implementation workers.
+- **What the AI did:** collected the MVP feature branches on one integration branch before they
+  reached `main` (docs, web, devnet run, demo mode, redeem builder, lifecycle, oracle adapters,
+  worker wiring, unwind, dev-demo, docs-measure, e2e, slot config, real close and time-of-day),
+  resolved the merge conflicts, merged the two `[test]` tables in `Anchor.toml`, regenerated the
+  shipped IDLs and updated the README status. Each feature branch has its own entry below; this
+  entry was added afterwards because the branch's merge into `main` had none.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — Close-out-and-redeem on a real chain and in the browser (`feat/closeout-chain`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

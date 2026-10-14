@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { createMockSource } from './mock.js'
+import { createMockSource, syntheticIntraday } from './mock.js'
 import type { MockSourceOptions } from './mock.js'
 import { isRecord, malformed } from './parse.js'
-import type { LivePriceProvider, PriceProvider } from './types.js'
+import type { IntradayPriceProvider, LivePriceProvider, PriceProvider } from './types.js'
 import { closeInputs, parseChart, toNormalized } from './yahoo.js'
 
 /** Values transcribed from one live chart API response on the evening of 2026-10-12. */
@@ -33,7 +33,7 @@ const isRecorded = (ticker: string) => ticker.toUpperCase() === TICKER
  */
 export function createDemoReplaySource(
   options: MockSourceOptions = {},
-): PriceProvider & LivePriceProvider {
+): PriceProvider & LivePriceProvider & IntradayPriceProvider {
   const now = options.now ?? (() => Math.floor(Date.now() / 1000))
   const recording = load()
   const handWritten = createMockSource({ now })
@@ -65,6 +65,12 @@ export function createDemoReplaySource(
     async latest(ticker) {
       if (!isRecorded(ticker)) return handWritten.latest(ticker)
       return toNormalized(TICKER, recording.chart.regularMarketPrice, 0, now(), false)
+    },
+
+    /** A synthetic series around the recorded close; it has no recorded minute bars to chart. */
+    async intraday(ticker, fromTs, toTs) {
+      if (!isRecorded(ticker)) return handWritten.intraday(ticker, fromTs, toTs)
+      return syntheticIntraday(TICKER, recording.chart.regularMarketPrice, fromTs, toTs)
     },
   }
 }

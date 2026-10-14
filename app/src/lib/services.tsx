@@ -3,11 +3,14 @@
 import { createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ChainClient, Unsubscribe, WalletPort } from './chain'
+import type { IntradayClient } from './intraday'
 
 /** Everything the components reach outside React for, so tests can inject fakes. */
 export interface Services {
   chain: ChainClient
   wallet: WalletPort
+  /** The Markets chart's series from the worker (R66). */
+  intraday: IntradayClient
   /** Current time, Unix seconds. */
   now: () => number
 }
