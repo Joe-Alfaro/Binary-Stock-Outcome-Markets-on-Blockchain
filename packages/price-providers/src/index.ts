@@ -2,12 +2,14 @@ export {
   ALPACA_DEFAULT_TICKERS,
   ALPACA_REST_URL,
   ALPACA_STREAM_URL,
+  alpacaConfigFromEnv,
   alpacaCredentialsFromEnv,
   createAlpacaSource,
   createAlpacaStream,
 } from './alpaca.js'
 export type {
   AlpacaCredentials,
+  AlpacaEnvConfig,
   AlpacaReconnectOptions,
   AlpacaSource,
   AlpacaSourceOptions,

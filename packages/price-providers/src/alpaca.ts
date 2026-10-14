@@ -26,6 +26,23 @@ export function alpacaCredentialsFromEnv(
   return notImplemented(env)
 }
 
+/** Everything the Alpaca source reads from env. */
+export interface AlpacaEnvConfig extends AlpacaCredentials {
+  /** Market-data REST base URL, without a path: `ALPACA_DATA_URL`, else `ALPACA_API_ENDPOINT` when it is a data host, else `ALPACA_REST_URL`. */
+  restUrl: string
+  /** `ALPACA_STREAM_URL`, else `ALPACA_STREAM_URL`'s default. */
+  streamUrl: string
+}
+
+/**
+ * Reads the credentials (as `alpacaCredentialsFromEnv`) and the optional URLs. `ALPACA_API_ENDPOINT`
+ * is usually the trading API (paper or live), which market data never uses; it only counts when it
+ * names a market-data host. Throws an Error naming the variable when a set URL is invalid.
+ */
+export function alpacaConfigFromEnv(env: Record<string, string | undefined>): AlpacaEnvConfig {
+  return notImplemented(env)
+}
+
 /** Reconnect delays after the stream drops: they grow from `initialMs` and never pass `maxMs`. */
 export interface AlpacaReconnectOptions {
   initialMs: number
