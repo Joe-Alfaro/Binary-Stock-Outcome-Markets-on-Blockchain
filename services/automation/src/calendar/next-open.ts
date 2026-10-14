@@ -82,11 +82,7 @@ export function reopenLabel(now: number): string | null {
     // Over a weekend the tag always names the day: Sunday evening reads "Reopens Mon".
     const weekend = WEEKEND.has(weekday(now))
     const day =
-      date === today
-        ? 'today'
-        : date === dayAfter(today) && !weekend
-          ? 'tomorrow'
-          : weekday(openTs)
+      date === today ? 'today' : date === dayAfter(today) && !weekend ? 'tomorrow' : weekday(openTs)
     return `Reopens ${day} 9:30 AM ET`
   })
 }
