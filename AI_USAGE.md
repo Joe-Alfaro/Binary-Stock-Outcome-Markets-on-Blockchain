@@ -2,6 +2,20 @@
 
 One entry per merged change: what AI tools did and what a human reviewed or changed. Newest first.
 
+## 2026-10-14 — Alpaca market-data source (`feat/alpaca-source`)
+
+- **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.
+- **What the AI did:** the test worker recorded small Alpaca fixtures (9 REST requests, 2 short
+  websocket sessions, no credentials) and wrote red tests for R67 against them and a local fake
+  websocket server. The implementation worker, without changing the tests, wrote the Alpaca
+  source: REST bars, previous close and settlement inputs (SIP where the free plan allows it,
+  IEX otherwise, never after-hours), a websocket stream client with auth, subscribe and bounded
+  reconnect backoff, one batched snapshot while the stream is down, the env config
+  (`ALPACA_DATA_URL` and `ALPACA_STREAM_URL`, never the trading endpoint), and the default-source
+  rule (alpaca with keys, else mock). The worker closes the stream on stop. Updated the README,
+  `ARCHITECTURE.md` and `.env.example`.
+- **Human review:** pending MR review.
+
 ## 2026-10-13 — Intraday price chart on Markets cards (`feat/markets-chart`)
 
 - **Tool:** Claude Code (Claude Opus 5.5): one worker wrote the tests, another wrote the code.

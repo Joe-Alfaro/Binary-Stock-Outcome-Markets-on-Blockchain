@@ -357,7 +357,19 @@ Every published value is logged with its source, timestamp and transaction signa
 
 ### 5.5 Data sources
 
-**Source A: Yahoo Finance chart API (`RELAY_1_SOURCE=yahoo`, the default).** Free and keyless. The relay uses the chart endpoint (`/v8/finance/chart/<TICKER>`) with regular-session data only:
+**Default source: Alpaca market data (`RELAY_1_SOURCE=alpaca`, R67, D81, D83, D84).** The default when `ALPACA_API_KEY` and `ALPACA_API_SECRET` are both set (otherwise `mock`). REST (`https://data.alpaca.markets/v2/stocks/…`, key pair in headers) serves daily and 1-minute bars and batched snapshots; the websocket (`wss://stream.data.alpaca.markets/v2/iex`) streams trades and quotes for the 7 tickers. The free plan's real-time data is IEX only, and SIP (consolidated) data is served only when it is older than about 15 minutes.
+
+| Need | How |
+| --- | --- |
+| Official close (shape 1) | The SIP daily bar of the close day (equal to the closing-auction print), stamped `close_ts`, conf 0. While SIP is refused (the first ~15 minutes after close) there is none. |
+| Interpolation fallback (shape 3) | The D23 pair from 1-minute bars (SIP, IEX while SIP is refused): the last bar before close at `close_ts − 1` and the 16:00 bar's open at `close_ts + 1`, conf half the bar range. Never marked official; no bar after the closing minute is used. |
+| Previous close for strikes | The SIP daily bar dated the expected previous trading day; older means stale. |
+| Live display price | The stream's latest regular-session trade, conf half the quoted spread. While the stream reconnects (bounded exponential backoff), one batched IEX snapshot request serves all 7 tickers for a tick. |
+| Intraday chart (R66) | 1-minute bars, SIP for windows older than 15 minutes, otherwise IEX; after-hours bars dropped. |
+
+HTTP 429 backs off up to 10 minutes (failing fast meanwhile), a 401 or 403 is `unauthorized`, network errors are tried at most 3 times. `ALPACA_API_ENDPOINT` (the trading API) is never used for data.
+
+**Source A: Yahoo Finance chart API (`RELAY_1_SOURCE=yahoo`).** Free and keyless. The relay uses the chart endpoint (`/v8/finance/chart/<TICKER>`) with regular-session data only:
 
 | Need | How |
 | --- | --- |
@@ -562,9 +574,17 @@ RELAY_SIGNER_2_KEYPAIR=        # only when slot 2 runs a second relay source
 # Oracle slots: relay | pyth | chainlink | disabled
 ORACLE_SLOT_1=relay
 ORACLE_SLOT_2=disabled
-# Relay sources: yahoo (default) | mock (recorded fixtures, works offline)
-RELAY_1_SOURCE=yahoo
+# Relay sources: alpaca | yahoo | mock (recorded fixtures, works offline). Empty: alpaca when both
+# Alpaca keys are set, otherwise mock
+RELAY_1_SOURCE=
 RELAY_2_SOURCE=                # set when a second relay source exists
+
+# Alpaca market data (RELAY_<n>_SOURCE=alpaca)
+ALPACA_API_KEY=
+ALPACA_API_SECRET=
+ALPACA_API_ENDPOINT=           # trading API; never used for market data
+ALPACA_DATA_URL=               # empty means https://data.alpaca.markets
+ALPACA_STREAM_URL=             # empty means wss://stream.data.alpaca.markets/v2/iex
 
 # Third-party oracles (only when a slot is switched to them)
 PYTH_RECEIVER_PROGRAM_ID=
@@ -657,7 +677,7 @@ Every requirement and the components that satisfy it. Section references are to 
 | R36 | Admin fallback with delay, price not outcome [G] | `propose_admin_price` (+900), `finalize_admin_settle` (+3600), `TickerDay` pending fields, `AdminPriceMismatch` (§3.3, §4.4) |
 | R37 | Settlement escalation, markets found on-chain [G] | Settlement job, escalation schedule, on-chain discovery, phase from the clock (§4.4, §6.2) |
 | R38 | Settlement by `close_ts + 5 min` [G] | Relay 3-minute wait, 30 s polling, latency test, demo log (§4.4) |
-| R39 | Free market-data relay source [G] | `yahoo` and `mock` `RelaySource`s, `RELAY_1_SOURCE` (§5.5) |
+| R39 | Free market-data relay source [G] | `alpaca`, `yahoo` and `mock` `RelaySource`s, `RELAY_1_SOURCE` (§5.5) |
 | R40 | Relay publisher | Relay publisher, confidence rule, logging (§5.4) |
 | R41 | Pause / unpause | `pause`, `unpause` (§3.3) |
 | R42 | Config can't touch existing markets | `update_config` has no market accounts (§3.3) |

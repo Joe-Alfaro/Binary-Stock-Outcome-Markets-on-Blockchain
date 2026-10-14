@@ -27,7 +27,7 @@ closing-price rule and the test strategy. This README covers running it and the 
 | `programs/meridian_oracle` | Anchor program for the price relay: signer registry, append-only price updates, write-once close records, one latest price per ticker |
 | `crates/meridian-math`     | `no_std` Rust crate with the closing-price rule, payout rule and strike ladder                                                        |
 | `packages/sdk`             | TypeScript twin of the math, the four trade-path transaction builders, the No view of the book, P&L replay and the mainnet guard      |
-| `packages/price-providers` | Price sources: the Yahoo chart API, a `mock` source that replays fixtures, and Pyth and Chainlink normalizers                         |
+| `packages/price-providers` | Price sources: Alpaca market data, the Yahoo chart API, a `mock` source that replays fixtures, and Pyth and Chainlink normalizers     |
 | `services/automation`      | Worker: trading calendar, morning job, settlement job, relay publisher, alert sinks, `/healthz` and the chart's intraday price route  |
 | `app`                      | Next.js web app                                                                                                                       |
 | `scripts`                  | `make dev`, `make deploy-devnet`, `make demo`, the config bootstrap and the mainnet guard                                             |
@@ -130,7 +130,7 @@ The first live Railway deploy waits for the user's confirmation, so there is no 
 **Markets chart.** Each Markets card charts its ticker's price for today's session while the market
 is open, else the last complete session. The browser reads the series only from the worker's
 `GET /prices/intraday/<ticker>` on the health server, at `NEXT_PUBLIC_PRICE_API_URL`. The worker
-proxies the relay source (Yahoo 1-minute bars, or a synthetic offline series in mock mode) and
+proxies the relay source (Alpaca or Yahoo 1-minute bars, or a synthetic offline series in mock mode) and
 caches each ticker for 60 s, so there is at most one upstream request per ticker per minute. The
 chart is a plain SVG line with no charting dependency.
 
@@ -194,7 +194,7 @@ $500/month), Chainlink Data Streams needs streams assigned to the account, and o
 had no suitable US equity feeds. The relay is free and exercises the same settlement path a
 third-party oracle would.
 
-**How it works.** A publisher in the worker reads prices from the Yahoo chart API and signs them
+**How it works.** A publisher in the worker reads prices from the relay source and signs them
 into `meridian_oracle`: append-only `PriceUpdate`s and one write-once `CloseRecord` per signer,
 ticker and day. `settle_market` accepts only that canonical close record, so the caller can't pick
 the input. The price is the official close if the source reports one, else a regular-session price
@@ -202,6 +202,33 @@ stamped exactly at the close, else a linear interpolation between regular-sessio
 minutes on each side. Comparisons with the strike use exact integer math. The first strike to
 settle fixes the price for every strike of that ticker and day. During market hours the relay also
 updates one `LatestPrice` account per ticker, about every 30 seconds, for the app's live prices.
+
+**Market data source.** The relay source is `RELAY_1_SOURCE`: `alpaca`, `yahoo` or `mock`. Left
+empty, it is `alpaca` when `ALPACA_API_KEY` and `ALPACA_API_SECRET` are both set, otherwise `mock`
+(fixtures, no network). Selecting `alpaca` without both keys stops the worker at start, naming the
+missing variable. The keys are sent only as request headers and are never logged. Market data
+always goes to `https://data.alpaca.markets` and `wss://stream.data.alpaca.markets/v2/iex`
+(override with `ALPACA_DATA_URL` and `ALPACA_STREAM_URL`). `ALPACA_API_ENDPOINT` is normally the
+trading API, which the source never calls; it only counts when its host is a `data.` host. The
+source only calls `/v2/stocks/…` market-data routes, never orders, account or positions.
+
+Alpaca's free plan gives real-time data from one exchange, IEX, and the consolidated SIP feed
+(every US exchange) only for data older than about 15 minutes. Each value uses:
+
+| Value                         | Feed                                                                                     |
+| ----------------------------- | ---------------------------------------------------------------------------------------- |
+| Live prices (`LatestPrice`)   | IEX: the websocket's trades and quotes; one batched IEX snapshot while it's reconnecting |
+| Previous close (strikes)      | SIP daily bar                                                                            |
+| Official close (settlement)   | SIP daily bar of the close day, once SIP serves it (about 15 minutes after the close)    |
+| Settlement bar fallback (D23) | SIP 1-minute bars, or IEX while SIP is refused; never marked official                    |
+| Markets chart (1-minute bars) | SIP for windows older than 15 minutes, otherwise IEX                                     |
+
+So live prices and the chart's last 15 minutes reflect IEX trades only, which can differ by a few
+cents from the consolidated price, and no close record is written in the first ~15 minutes after
+the close: the SIP daily close isn't served yet and IEX has no closing bar. The settlement job
+retries until it is. After-hours trades are never used. Alpaca's market-data terms limit
+redistributing its data; showing it in a devnet app is acceptable for this project, but any public
+or production use needs a plan that allows display to others.
 
 **The trust trade-off.** The relay is a centralized oracle with one data source and one signer key.
 A false close record would settle markets, and settled outcomes are final. Nothing on-chain stops
@@ -400,9 +427,12 @@ Not finished yet:
 ## Risks and limitations
 
 - **One oracle, one source, one signer.** The relay is trusted. A wrong close record would settle
-  markets for good. Slot 2 is disabled, so there's no second source to cross-check, and if Yahoo is
-  down at the close nothing settles until the admin fallback at +15 and +60 minutes.
-- **Unofficial price API.** The Yahoo chart API is undocumented and can change, rate-limit or
+  markets for good. Slot 2 is disabled, so there's no second source to cross-check, and if the
+  relay source is down at the close nothing settles until the admin fallback at +15 and +60 minutes.
+- **Alpaca's free feeds.** Real-time data is IEX only and SIP lags by about 15 minutes (see
+  [Price oracle](#price-oracle)). The free plan allows one stream connection per key, so two
+  workers sharing a key keep knocking each other off; reconnects back off up to a minute.
+- **Unofficial price API (`yahoo`).** The Yahoo chart API is undocumented and can change, rate-limit or
   disappear without notice. It answered 429 to every scripted attempt to record real responses, so
   the price fixtures in `packages/price-providers/fixtures` are hand-written in its format rather than
   captured, and marked `hand-written` in `fixtures/provenance.json`. The one exception is the AAPL
