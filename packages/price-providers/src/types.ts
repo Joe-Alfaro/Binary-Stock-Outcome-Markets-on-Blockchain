@@ -54,3 +54,21 @@ export interface LivePriceProvider {
   /** The latest regular-session price, or null when the source has none for today's session. */
   latest(ticker: string): Promise<NormalizedPrice | null>
 }
+
+/** One point of an intraday price series: a 1-minute bar's close. */
+export interface IntradayPoint {
+  /** Bar start, Unix seconds. */
+  t: number
+  /** Price in USD. */
+  price: number
+}
+
+/** A source of 1-minute regular-session bars, for the display-only Markets chart (R66). */
+export interface IntradayPriceProvider {
+  readonly name: string
+  /**
+   * The regular-session 1-minute closes with `fromTs <= t <= toTs`, oldest first, skipping
+   * minutes without a close. Rejects with a PriceSourceError, `rate-limited` on HTTP 429.
+   */
+  intraday(ticker: string, fromTs: number, toTs: number): Promise<IntradayPoint[]>
+}
