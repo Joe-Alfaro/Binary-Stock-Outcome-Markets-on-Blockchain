@@ -2,7 +2,7 @@
 // recorded 2026-10-14 sessions. Nothing here reaches the network.
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { createAlpacaSource, createAlpacaStream } from './index.js'
+import { createAlpacaSource, createAlpacaStream, createRelaySource } from './index.js'
 import type { AlpacaSource, AlpacaStream, AlpacaStreamEvent } from './index.js'
 import { startFakeAlpacaStream, transcriptDataBatches, waitUntil } from './alpaca-fake-stream.js'
 import type { AlpacaBatch, FakeAlpacaStream } from './alpaca-fake-stream.js'
@@ -364,5 +364,37 @@ describe('Alpaca source live prices (R67, R47)', () => {
     assert.ok(price && trade)
     assertClose(valueOf(price), trade.p)
     assert.equal(calls.length, sent, 'no REST request once streaming')
+  })
+})
+
+describe('Alpaca stream URL from env (R67)', () => {
+  it('createRelaySource streams from ALPACA_STREAM_URL', async () => {
+    const server = await fakeServer()
+    const { fetch } = fakeFetch(alpacaRoute({ snapshots: fixtures.snapshots() }))
+    const source = createRelaySource(
+      {
+        RELAY_1_SOURCE: 'alpaca',
+        ALPACA_API_KEY: KEYS.keyId,
+        ALPACA_API_SECRET: KEYS.secretKey,
+        ALPACA_API_ENDPOINT: 'https://paper-api.alpaca.markets/v2',
+        ALPACA_STREAM_URL: server.url,
+      },
+      1,
+      { fetch, now: () => STREAM_NOW },
+    )
+    cleanups.push(() => (source as { close?: () => void }).close?.())
+
+    await source.latest('AAPL')
+
+    await waitUntil(
+      () => messages(server, 'subscribe').length === 1,
+      3000,
+      'subscribed via env URL',
+    )
+    assert.deepEqual(messages(server, 'auth')[0]?.message, {
+      action: 'auth',
+      key: KEYS.keyId,
+      secret: KEYS.secretKey,
+    })
   })
 })
