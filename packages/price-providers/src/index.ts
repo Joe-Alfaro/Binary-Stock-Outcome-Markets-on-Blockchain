@@ -1,3 +1,21 @@
+export {
+  ALPACA_DEFAULT_TICKERS,
+  ALPACA_REST_URL,
+  ALPACA_STREAM_URL,
+  alpacaCredentialsFromEnv,
+  createAlpacaSource,
+  createAlpacaStream,
+} from './alpaca.js'
+export type {
+  AlpacaCredentials,
+  AlpacaReconnectOptions,
+  AlpacaSource,
+  AlpacaSourceOptions,
+  AlpacaStream,
+  AlpacaStreamEvent,
+  AlpacaStreamOptions,
+  AlpacaStreamPrice,
+} from './alpaca.js'
 export { normalizeChainlinkV11Report } from './chainlink.js'
 export { createDataStreamsClient } from './data-streams.js'
 export type {
@@ -19,6 +37,8 @@ export { createRelaySource } from './select.js'
 export { DEFAULT_RELAY_SOURCE, RELAY_SOURCE_NAMES, isRelaySourceName } from './sources.js'
 export type { RelaySourceName } from './sources.js'
 export type {
+  IntradayPoint,
+  IntradayPriceProvider,
   LivePriceProvider,
   NormalizedPrice,
   PreviousClose,

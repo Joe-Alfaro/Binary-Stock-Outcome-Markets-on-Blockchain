@@ -33,3 +33,24 @@ note that their values were copied from a live response whose bytes were not kep
   account is entitled to US equities.
 
 `1791576000` is 2026-10-09 16:00 ET, the close the fixtures are built around.
+
+## Alpaca
+
+`alpaca/` holds small Alpaca market-data responses (`data.alpaca.markets`, `/v2/stocks`) and two
+short websocket transcripts (`stream.data.alpaca.markets/v2/iex`), recorded on 2026-10-14 with a
+few requests. `provenance.json` records each request (never the credentials), capture time and
+SHA-256. Feeds:
+
+- SIP (consolidated): the daily bars (`bars-1day-…-sip.json`), the full 2026-10-13 session of
+  1-minute bars for AAPL and MSFT, the 1-minute bars around the 2026-10-13 4:00 PM ET close, and
+  the AAPL trades at that close. The free plan serves SIP only for data older than about 15
+  minutes; newer requests answer HTTP 403 (`sip-recent-refused.json`, recorded).
+- IEX (the free plan's real-time feed): the snapshots, the websocket transcripts and one
+  1-minute window around the close, which has no bars after 15:59 ET.
+- `unauthorized.html` is the recorded HTTP 401 body for a bad key (an nginx page, not JSON).
+- `rate-limited.json` is hand-written in the documented error schema: provoking a real 429 would
+  mean exceeding the rate limit on purpose.
+- In the websocket transcripts, the client's auth message holds `<ALPACA_API_KEY>` and
+  `<ALPACA_API_SECRET>` placeholders. Server messages are as received.
+
+`1791921600` is 2026-10-13 16:00 ET, the close the Alpaca fixtures are built around.
