@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import anchor from '@anchor-lang/core'
 import type { Idl } from '@anchor-lang/core'
 import { createRelaySource } from '@meridian/price-providers'
+import type { LivePriceProvider, PriceProvider } from '@meridian/price-providers'
 import { assertNotMainnet } from '@meridian/sdk'
 import { Connection, Keypair, PublicKey } from '@solana/web3.js'
 import { createAlerter, sinksFromEnv, type AlertSink, type LineWriter } from './alerts/index.js'
@@ -146,6 +147,8 @@ export interface WorkerDeps {
   alertSinks?: AlertSink[]
   /** Finds or posts the `PriceUpdateV2` accounts a Pyth slot settles from. */
   pythUpdates?: PythUpdateAccounts
+  /** The slot-1 relay source. Defaults to `createRelaySource(env, 1)`; `close` runs on stop. */
+  source?: PriceProvider & LivePriceProvider & { close?(): void }
 }
 
 export interface Worker {
@@ -233,7 +236,8 @@ export function startWorker(
   const controller = new AbortController()
   const { signal } = controller
   const shared = { chain: withScanHealth(chain, health, clock), alerter, clock, log }
-  const source = createRelaySource(env, 1, { now: () => Math.floor(clock.now() / 1000) })
+  const source =
+    deps.source ?? createRelaySource(env, 1, { now: () => Math.floor(clock.now() / 1000) })
   // The alpaca source's websocket opens on the first live tick and would keep the process alive.
   signal.addEventListener('abort', () => source.close?.())
   const oracle = createAnchorOracleClient({

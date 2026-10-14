@@ -28,6 +28,11 @@ note that their values were copied from a live response whose bytes were not kep
   provenance entry. Record `MSFT-2026-10-12-1d-intraday.json` during the regular session. Several
   tests hard-code values from the hand-written files (the $245.27 AAPL close, for example), so
   update them after a capture.
+- The `mock` source covers all 7 Markets tickers (AAPL, MSFT, GOOGL, AMZN, NVDA, META and TSLA)
+  from one `yahoo/<TICKER>-2026-10-09-1m.json` and one `-1d.json` each, all hand-written. Their
+  levels are plausible (within 30% of each stock's 2026-10-13 close) but not real prices; the
+  AAPL ones are the furthest off. Its 1-minute chart series is synthetic: a deterministic walk
+  around the `1m` file's last price, so it needs no full-session recording.
 - `pyth/` is a Hermes `GET /v2/updates/price/{publish_time}` response, and `chainlink/` a decoded
   Data Streams RWA Advanced (v11) report, written from the documented formats because neither
   account is entitled to US equities.

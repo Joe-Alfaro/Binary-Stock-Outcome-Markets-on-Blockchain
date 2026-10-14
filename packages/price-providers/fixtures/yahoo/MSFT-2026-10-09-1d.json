@@ -1,0 +1,98 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "MSFT",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "firstTradeDate": 511108200,
+          "hasPrePostMarketData": true,
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "exchangeTimezoneName": "America/New_York",
+          "longName": "Microsoft Corporation",
+          "shortName": "Microsoft Corporation",
+          "priceHint": 2,
+          "regularMarketPrice": 521.58,
+          "regularMarketTime": 1791576000,
+          "chartPreviousClose": 511.93,
+          "scale": 3,
+          "currentTradingPeriod": {
+            "pre": {
+              "timezone": "EDT",
+              "start": 1791547200,
+              "end": 1791567000,
+              "gmtoffset": -14400
+            },
+            "regular": {
+              "timezone": "EDT",
+              "start": 1791567000,
+              "end": 1791590400,
+              "gmtoffset": -14400
+            },
+            "post": {
+              "timezone": "EDT",
+              "start": 1791590400,
+              "end": 1791604800,
+              "gmtoffset": -14400
+            }
+          },
+          "dataGranularity": "1d",
+          "range": "5d"
+        },
+        "timestamp": [
+          1791207000,
+          1791293400,
+          1791379800,
+          1791466200,
+          1791552600
+        ],
+        "indicators": {
+          "quote": [
+            {
+              "open": [
+                512.56,
+                515.26,
+                514.12,
+                517.22,
+                519.88
+              ],
+              "high": [
+                517.67,
+                520.37,
+                519.22,
+                522.32,
+                524.98
+              ],
+              "low": [
+                509.8,
+                512.5,
+                511.35,
+                514.46,
+                517.11
+              ],
+              "close": [
+                514.26,
+                516.97,
+                515.82,
+                518.92,
+                521.58
+              ],
+              "volume": [
+                20500000,
+                21150000,
+                21800000,
+                22450000,
+                23100000
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "META",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "firstTradeDate": 1337347800,
+          "hasPrePostMarketData": true,
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "exchangeTimezoneName": "America/New_York",
+          "longName": "Meta Platforms, Inc.",
+          "shortName": "Meta Platforms, Inc.",
+          "priceHint": 2,
+          "regularMarketPrice": 741.63,
+          "regularMarketTime": 1791576000,
+          "chartPreviousClose": 727.9,
+          "scale": 3,
+          "currentTradingPeriod": {
+            "pre": {
+              "timezone": "EDT",
+              "start": 1791547200,
+              "end": 1791567000,
+              "gmtoffset": -14400
+            },
+            "regular": {
+              "timezone": "EDT",
+              "start": 1791567000,
+              "end": 1791590400,
+              "gmtoffset": -14400
+            },
+            "post": {
+              "timezone": "EDT",
+              "start": 1791590400,
+              "end": 1791604800,
+              "gmtoffset": -14400
+            }
+          },
+          "dataGranularity": "1d",
+          "range": "5d"
+        },
+        "timestamp": [
+          1791207000,
+          1791293400,
+          1791379800,
+          1791466200,
+          1791552600
+        ],
+        "indicators": {
+          "quote": [
+            {
+              "open": [
+                728.81,
+                732.65,
+                731.02,
+                735.43,
+                739.21
+              ],
+              "high": [
+                736.07,
+                739.91,
+                738.27,
+                742.69,
+                746.47
+              ],
+              "low": [
+                724.88,
+                728.72,
+                727.09,
+                731.5,
+                735.28
+              ],
+              "close": [
+                731.23,
+                735.07,
+                733.44,
+                737.85,
+                741.63
+              ],
+              "volume": [
+                22550000,
+                23265000,
+                23980000,
+                24695000,
+                25410000
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}
