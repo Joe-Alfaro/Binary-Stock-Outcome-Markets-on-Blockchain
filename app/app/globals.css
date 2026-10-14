@@ -462,6 +462,104 @@ a {
   margin-top: auto;
 }
 
+/* Markets card price chart (R66) */
+
+.price-chart {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.price-chart--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The label row plus the plot, so the card doesn't jump when the chart arrives. */
+  min-height: calc(1.5rem + 72px);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.price-chart__label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.price-chart__change {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-chart__change--up {
+  color: var(--yes);
+}
+
+.price-chart__change--down {
+  color: var(--no);
+}
+
+.price-chart__change--flat {
+  color: var(--muted);
+}
+
+.price-chart__plot {
+  position: relative;
+  height: 72px;
+}
+
+.price-chart__plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+.price-chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.price-chart__baseline {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.price-chart__crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.price-chart__dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+
+.price-chart__tooltip {
+  position: absolute;
+  top: -0.25rem;
+  right: 0;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
 /* Trade */
 
 .trade-header {
