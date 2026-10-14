@@ -414,3 +414,12 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   NYSE calendar (always in ET), exported them to the app as a package subpath, and added the
   Markets cards' Closed tag, which replaces the stale marker while the market is closed.
 - **Human review:** pending MR review.
+
+## 2026-10-14 — Markets card closed layout and last close (`feat/card-layout`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the test and implementation workers.
+- **What the AI did:** wrote the R69 layout (Playwright) and last-close tests, then cut the Closed
+  pill down to the word "Closed", moved the reopen time to the status line under the chart, and
+  showed the last close (the on-chain price, else the worker's session close) labelled "Last
+  close" while the market is closed.
+- **Human review:** pending MR review.

@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 import type { PointerEvent } from 'react'
-import type { Ticker } from '../lib/chain'
 import { formatEtMinute, formatPercentChange, formatSessionDate, formatUsd } from '../lib/format'
-import { useIntraday } from '../lib/hooks'
+import type { IntradayState } from '../lib/hooks'
 import { changeSinceOpen } from '../lib/intraday'
 import type { IntradayPoint, IntradaySeries } from '../lib/intraday'
 
@@ -131,10 +130,10 @@ function Chart({ series, change }: { series: IntradaySeries; change: number }) {
 
 /**
  * The Markets card's price chart (R66): today's session while it's open, else the last complete
- * session, with a dashed line at the open. "Chart unavailable" with no data or an error.
+ * session, with a dashed line at the open. "Chart unavailable" with no data or an error. The card
+ * owns the series state (`useIntraday`) so it can also show the session close.
  */
-export function PriceChart({ ticker }: { ticker: Ticker }) {
-  const state = useIntraday(ticker)
+export function PriceChart({ state }: { state: IntradayState }) {
   if (state.status === 'loading') {
     return <p className="price-chart price-chart--empty muted">Loading chart…</p>
   }

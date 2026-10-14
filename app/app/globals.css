@@ -439,39 +439,37 @@ a {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
 }
 
 .ticker-card__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .ticker-card__head h2 {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-/* Closed tag (R68): a quiet pill in the card's top-right corner, readable as text. */
+/* Closed tag (R68, R69): a compact "Closed" pill in the card's top-right corner. */
 .closed-tag {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.375rem;
+  flex-shrink: 0;
   padding: 0.1rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg);
-  color: var(--muted);
+  color: var(--text);
   font-size: 0.75rem;
+  font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
 }
 
-.closed-tag__state {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.closed-tag__state::before {
+.closed-tag::before {
   content: '';
   display: inline-block;
   width: 0.4rem;
@@ -483,10 +481,19 @@ a {
 }
 
 .ticker-card__price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.5rem;
   font-size: 1.75rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   margin: 0.25rem 0 0;
+}
+
+.ticker-card__price-label {
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 .ticker-card__link {
