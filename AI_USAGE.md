@@ -406,3 +406,11 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   to plausible levels, with provenance entries and a README note; added the mock source's
   synthetic intraday series (the same code as `feat/markets-chart`).
 - **Human review:** pending MR review.
+
+## 2026-10-14 — Closed tag with reopen time on Markets cards (`feat/closed-tag`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the test and implementation workers.
+- **What the AI did:** wrote the R68 tests, then the next-open and reopen-label functions on the
+  NYSE calendar (always in ET), exported them to the app as a package subpath, and added the
+  Markets cards' Closed tag, which replaces the stale marker while the market is closed.
+- **Human review:** pending MR review.

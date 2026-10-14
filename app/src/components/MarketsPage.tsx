@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
+import { reopenLabel } from '@meridian/automation/calendar/next-open'
 import { TICKERS } from '../lib/chain'
 import type { ContractSummary, LatestPrice, Ticker } from '../lib/chain'
 import { formatUsd } from '../lib/format'
@@ -11,6 +12,16 @@ import { PriceChart } from './PriceChart'
 
 function activeCount(markets: readonly ContractSummary[], ticker: Ticker): number {
   return markets.filter((m) => m.ticker === ticker && m.status === 'Open').length
+}
+
+/** The top-right tag while the regular session is closed, with the next open (R68). */
+function ClosedTag({ reopens }: { reopens: string }) {
+  return (
+    <span className="closed-tag" role="status" aria-label={`Closed. ${reopens}`}>
+      <span className="closed-tag__state">Closed</span>
+      <span className="closed-tag__reopen">{reopens}</span>
+    </span>
+  )
 }
 
 function TickerCard({
@@ -25,12 +36,15 @@ function TickerCard({
   nowTs: number
 }) {
   const titleId = `ticker-${ticker}`
-  const stale = price !== undefined && isStale(price.publishTs, nowTs)
+  const reopens = reopenLabel(nowTs)
+  // While closed the price is expected to be old, so the Closed tag replaces the stale marker.
+  const stale = reopens === null && price !== undefined && isStale(price.publishTs, nowTs)
   return (
     <article className="card ticker-card" aria-labelledby={titleId}>
       <header className="ticker-card__head">
         <h2 id={titleId}>{ticker}</h2>
         {stale && <span className="badge badge--warn">Stale</span>}
+        {reopens !== null && <ClosedTag reopens={reopens} />}
       </header>
       <p className="ticker-card__price">{price ? formatUsd(price.price) : '—'}</p>
       <PriceChart ticker={ticker} />
@@ -50,8 +64,8 @@ function TickerCard({
 }
 
 /**
- * The 7 tickers with live price, an intraday chart, publish time, stale marker and active
- * contracts (R47, R50, R66).
+ * The 7 tickers with live price, an intraday chart, publish time, stale marker or Closed tag, and
+ * active contracts (R47, R50, R66, R68).
  */
 export function MarketsPage() {
   const { chain } = useServices()

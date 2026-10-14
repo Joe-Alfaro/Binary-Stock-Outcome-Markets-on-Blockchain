@@ -4,6 +4,10 @@
   "private": true,
   "description": "Worker: scheduler, jobs, relay publishers, alerts, admin CLI",
   "type": "module",
+  "exports": {
+    "./calendar": "./src/calendar/index.ts",
+    "./calendar/next-open": "./src/calendar/next-open.ts"
+  },
   "scripts": {
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
