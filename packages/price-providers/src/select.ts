@@ -1,28 +1,52 @@
+import { alpacaConfigFromEnv, createAlpacaSource } from './alpaca.js'
 import { createDemoReplaySource } from './demo-replay.js'
 import { createMockSource } from './mock.js'
 import { DEFAULT_RELAY_SOURCE, RELAY_SOURCE_NAMES, isRelaySourceName } from './sources.js'
+import type { RelaySourceName } from './sources.js'
 import type { LivePriceProvider, PriceProvider } from './types.js'
 import { createYahooSource } from './yahoo.js'
 import type { YahooSourceOptions } from './yahoo.js'
 
+/** A relay source; the alpaca one holds a websocket that `close` shuts. */
+export type RelaySource = PriceProvider & LivePriceProvider & { close?(): void }
+
+function hasAlpacaKeys(env: Record<string, string | undefined>): boolean {
+  return Boolean(env.ALPACA_API_KEY?.trim() && env.ALPACA_API_SECRET?.trim())
+}
+
 /**
- * Builds the relay source named by `RELAY_<slot>_SOURCE`, defaulting to yahoo when unset. With
- * `DEMO_MODE=true` the mock source replays the recorded AAPL close of 2026-10-12 (R44). The mock
- * sources also take `yahooOptions.now`, so every source stamps live prices from the same clock.
+ * Builds the relay source named by `RELAY_<slot>_SOURCE`. When unset it is alpaca if both
+ * `ALPACA_API_KEY` and `ALPACA_API_SECRET` are set, otherwise mock (R67). Selecting alpaca without
+ * the keys throws, naming the missing variables. With `DEMO_MODE=true` the mock source replays the
+ * recorded AAPL close of 2026-10-12 (R44). Every source takes `options.now`, so they all stamp live
+ * prices from the same clock, and the network sources take `options.fetch`.
  */
 export function createRelaySource(
   env: Record<string, string | undefined>,
   slot: 1 | 2 = 1,
-  yahooOptions: YahooSourceOptions = {},
-): PriceProvider & LivePriceProvider {
+  options: YahooSourceOptions = {},
+): RelaySource {
   const variable = `RELAY_${slot}_SOURCE`
-  const name = env[variable]?.trim() || DEFAULT_RELAY_SOURCE
+  const fallback: RelaySourceName = hasAlpacaKeys(env) ? 'alpaca' : DEFAULT_RELAY_SOURCE
+  const name = env[variable]?.trim() || fallback
   if (!isRelaySourceName(name)) {
     throw new Error(`${variable}=${name} is not one of ${RELAY_SOURCE_NAMES.join(', ')}`)
   }
   if (name === 'mock') {
-    const options = yahooOptions.now ? { now: yahooOptions.now } : {}
-    return env.DEMO_MODE === 'true' ? createDemoReplaySource(options) : createMockSource(options)
+    const mockOptions = options.now ? { now: options.now } : {}
+    return env.DEMO_MODE === 'true'
+      ? createDemoReplaySource(mockOptions)
+      : createMockSource(mockOptions)
   }
-  return createYahooSource(yahooOptions)
+  if (name === 'alpaca') {
+    const config = alpacaConfigFromEnv(env)
+    return createAlpacaSource({
+      ...options,
+      keyId: config.keyId,
+      secretKey: config.secretKey,
+      restUrl: config.restUrl,
+      stream: { url: config.streamUrl },
+    })
+  }
+  return createYahooSource(options)
 }

@@ -36,6 +36,7 @@ export { PYTH_FEED_IDS, normalizePythUpdates } from './pyth.js'
 export { createPythHermesProvider } from './pyth-hermes.js'
 export type { PythCloseUpdate, PythHermesOptions, PythHermesProvider } from './pyth-hermes.js'
 export { createRelaySource } from './select.js'
+export type { RelaySource } from './select.js'
 export { DEFAULT_RELAY_SOURCE, RELAY_SOURCE_NAMES, isRelaySourceName } from './sources.js'
 export type { RelaySourceName } from './sources.js'
 export type {
