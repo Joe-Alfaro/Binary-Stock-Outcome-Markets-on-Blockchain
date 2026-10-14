@@ -5,7 +5,8 @@ import { reopenLabel } from '@meridian/automation/calendar/next-open'
 import { TICKERS } from '../lib/chain'
 import type { ContractSummary, LatestPrice, Ticker } from '../lib/chain'
 import { formatUsd } from '../lib/format'
-import { useAsync, useLatestPrices, useNow } from '../lib/hooks'
+import { useAsync, useIntraday, useLatestPrices, useNow } from '../lib/hooks'
+import type { IntradayState } from '../lib/hooks'
 import { formatPublishTime, isStale } from '../lib/prices'
 import { useServices } from '../lib/services'
 import { PriceChart } from './PriceChart'
@@ -14,14 +15,29 @@ function activeCount(markets: readonly ContractSummary[], ticker: Ticker): numbe
   return markets.filter((m) => m.ticker === ticker && m.status === 'Open').length
 }
 
-/** The top-right tag while the regular session is closed, with the next open (R68). */
+/**
+ * The header pill while the regular session is closed (R68, R69). It shows only "Closed"; its
+ * accessible name keeps the next open, which the status line under the chart shows.
+ */
 function ClosedTag({ reopens }: { reopens: string }) {
   return (
     <span className="closed-tag" role="status" aria-label={`Closed. ${reopens}`}>
-      <span className="closed-tag__state">Closed</span>
-      <span className="closed-tag__reopen">{reopens}</span>
+      Closed
     </span>
   )
+}
+
+/** The worker's session close: the last point of a complete (not live) session. */
+function sessionClose(state: IntradayState): number | undefined {
+  if (state.status !== 'ready' || state.series.live) return undefined
+  return state.series.points.at(-1)?.price
+}
+
+/** The line under the chart: the next open while closed, else the price's publish time. */
+function statusLine(reopens: string | null, price: LatestPrice | undefined) {
+  if (reopens !== null) return reopens
+  if (price) return <>As of {formatPublishTime(price.publishTs)}</>
+  return 'Waiting for the first price'
 }
 
 function TickerCard({
@@ -36,21 +52,28 @@ function TickerCard({
   nowTs: number
 }) {
   const titleId = `ticker-${ticker}`
+  const intraday = useIntraday(ticker)
   const reopens = reopenLabel(nowTs)
+  const closed = reopens !== null
   // While closed the price is expected to be old, so the Closed tag replaces the stale marker.
-  const stale = reopens === null && price !== undefined && isStale(price.publishTs, nowTs)
+  const stale = !closed && price !== undefined && isStale(price.publishTs, nowTs)
+  // While closed, the on-chain price if there is one, else the worker's session close (R69).
+  const shown = closed ? (price?.price ?? sessionClose(intraday)) : price?.price
   return (
     <article className="card ticker-card" aria-labelledby={titleId}>
       <header className="ticker-card__head">
         <h2 id={titleId}>{ticker}</h2>
         {stale && <span className="badge badge--warn">Stale</span>}
-        {reopens !== null && <ClosedTag reopens={reopens} />}
+        {closed && <ClosedTag reopens={reopens} />}
       </header>
-      <p className="ticker-card__price">{price ? formatUsd(price.price) : '—'}</p>
-      <PriceChart ticker={ticker} />
-      <p className="muted">
-        {price ? <>As of {formatPublishTime(price.publishTs)}</> : 'Waiting for the first price'}
+      <p className="ticker-card__price">
+        <span>{shown === undefined ? '—' : formatUsd(shown)}</span>
+        {closed && shown !== undefined && (
+          <span className="ticker-card__price-label muted">Last close</span>
+        )}
       </p>
+      <PriceChart state={intraday} />
+      <p className="muted">{statusLine(reopens, price)}</p>
       <p>
         {active === null
           ? 'Loading contracts…'
@@ -64,8 +87,8 @@ function TickerCard({
 }
 
 /**
- * The 7 tickers with live price, an intraday chart, publish time, stale marker or Closed tag, and
- * active contracts (R47, R50, R66, R68).
+ * The 7 tickers with live price (the last close while closed), an intraday chart, publish time or
+ * next open, stale marker or Closed tag, and active contracts (R47, R50, R66, R68, R69).
  */
 export function MarketsPage() {
   const { chain } = useServices()
