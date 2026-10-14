@@ -349,3 +349,12 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   running the same gates, registered a project shell runner and turned on "Pipelines must
   succeed".
 - **Human review:** pending MR review.
+
+## 2026-10-14 — Mock source covers all 7 tickers (`feat/mock-tickers`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as an implementation worker.
+- **What the AI did:** generated hand-written 1-minute and daily chart fixtures for GOOGL, AMZN,
+  NVDA, META and TSLA, plus MSFT's missing daily file, from the existing hand-written ones rescaled
+  to plausible levels, with provenance entries and a README note; added the mock source's
+  synthetic intraday series (the same code as `feat/markets-chart`).
+- **Human review:** pending MR review.
