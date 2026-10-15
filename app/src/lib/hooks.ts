@@ -173,7 +173,8 @@ export type TxState =
 
 /**
  * Builds, signs once and confirms one transaction at `confirmed` (R54, R55). The wallet prompt is
- * the only signature; failures become the plain-language messages from `tradeErrorMessage`. When
+ * the only signature; failures become the plain-language messages from `tradeErrorMessage`, or
+ * from `errorMessage` when given. When
  * `build` returns several transactions (a split close-out), each is signed and confirmed in order,
  * and the first failure stops the rest.
  */
@@ -183,7 +184,11 @@ export function useTransaction() {
   const [tx, setTx] = useState<TxState>({ phase: 'idle' })
 
   const run = useCallback(
-    async (label: string, build: () => Promise<UnsignedTx | UnsignedTx[]>) => {
+    async (
+      label: string,
+      build: () => Promise<UnsignedTx | UnsignedTx[]>,
+      errorMessage: (error: unknown) => string = tradeErrorMessage,
+    ) => {
       setTx({ phase: 'signing', label })
       try {
         const built = await build()
@@ -200,7 +205,7 @@ export function useTransaction() {
         setTx({ phase: 'confirmed', label, signature })
         return true
       } catch (error) {
-        setTx({ phase: 'failed', message: tradeErrorMessage(error) })
+        setTx({ phase: 'failed', message: errorMessage(error) })
         return false
       }
     },

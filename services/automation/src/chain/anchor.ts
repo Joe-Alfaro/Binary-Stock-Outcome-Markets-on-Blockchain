@@ -551,17 +551,6 @@ export function createAnchorChainClient(options: AnchorChainClientOptions): Anch
       return settleFromAccounts(settle, closeRecord, [])
     },
 
-    async finalizeAdminSettle(ticker, tradingDay) {
-      await retry(() =>
-        method('finalizeAdminSettle')([...tickerBytes(ticker)], tradingDayNumber(tradingDay))
-          .accountsPartial({
-            caller: authority.publicKey,
-            tickerDay: tickerDayPda(ticker, tradingDay),
-          })
-          .rpc(),
-      )
-    },
-
     async readPendingAdminPrice(ticker, tradingDay) {
       const day = await fetchAccount<TickerDayAccount>(
         'tickerDay',

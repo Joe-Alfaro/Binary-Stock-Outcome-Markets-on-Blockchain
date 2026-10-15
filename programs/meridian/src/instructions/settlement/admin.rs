@@ -19,7 +19,7 @@ pub struct ProposeAdminPrice<'info> {
     pub ticker_day: Account<'info, TickerDay>,
 }
 
-/// Anyone. Marks the ticker-day `Final` with the pending admin price.
+/// Admin only (D93). Marks the ticker-day `Final` with the pending admin price.
 #[derive(Accounts)]
 #[instruction(ticker: Ticker, trading_day: u32)]
 pub struct FinalizeAdminSettle<'info> {
@@ -75,6 +75,11 @@ pub fn handle_finalize_admin_settle(
 ) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let config = &ctx.accounts.config;
+    require_keys_eq!(
+        ctx.accounts.caller.key(),
+        config.admin,
+        MeridianError::Unauthorized
+    );
     let day = &mut ctx.accounts.ticker_day;
     require!(
         day.status == TickerDayStatus::Open,

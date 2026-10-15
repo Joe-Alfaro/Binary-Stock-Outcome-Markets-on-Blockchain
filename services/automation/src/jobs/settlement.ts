@@ -35,6 +35,7 @@ const FAST_PHASE_END_MS = 15 * MINUTE_MS
 const FAST_PHASE_START_MS: Record<OracleSlot, number> = { 1: 0, 2: 4 * MINUTE_MS }
 /** Staggered slow polling: slot 1 at +16, +19, …; slot 2 a minute later. */
 const SLOW_PHASE_START_MS: Record<OracleSlot, number> = { 1: 16 * MINUTE_MS, 2: 17 * MINUTE_MS }
+/** From +60 a pending admin price can be finalized, by the admin only (D93). */
 const ADMIN_FINALIZE_MS = 60 * MINUTE_MS
 const ADMIN_CHECK_INTERVAL_MS = MINUTE_MS
 const ESCALATION_ALERTS = [
@@ -136,10 +137,9 @@ class TickerDaySettler {
       }
       if (this.#done) return
       if (next.admin <= now) {
-        await this.#finalizePendingAdminPrice()
-        next.admin = clock.now() + ADMIN_CHECK_INTERVAL_MS
+        const alerted = await this.#alertPendingAdminPrice()
+        next.admin = alerted ? Infinity : clock.now() + ADMIN_CHECK_INTERVAL_MS
       }
-      if (this.#done) return
       const due = alerts.filter((alert) => alert.at <= now)
       alerts.splice(0, due.length)
       for (const { kind } of due) await this.#escalate(kind)
@@ -216,19 +216,30 @@ class TickerDaySettler {
     })
   }
 
-  /** From +60, finalizes a pending admin price and settles every market at it. */
-  async #finalizePendingAdminPrice(): Promise<void> {
+  /**
+   * From +60, tells the admin once to finalize a pending admin price. The worker holds no admin
+   * key and never finalizes (D93); once the admin does, the slot polls settle every market at it.
+   * Returns whether the alert was sent.
+   */
+  async #alertPendingAdminPrice(): Promise<boolean> {
     const { chain, log } = this.#ctx
-    try {
-      const pending = await chain.readPendingAdminPrice(this.#ticker, this.#tradingDay)
-      if (!pending) return
-      await chain.finalizeAdminSettle(this.#ticker, this.#tradingDay)
-      log.info('admin price finalized', { ...this.#details, price: formatPrice(pending.price) })
-    } catch (error) {
-      log.error('finalize_admin_settle failed', { ...this.#details, error: errorMessage(error) })
-      return
-    }
-    await this.#settleAll(1)
+    const pending = await chain
+      .readPendingAdminPrice(this.#ticker, this.#tradingDay)
+      .catch((error: unknown) => {
+        log.error('reading the pending admin price failed', {
+          ...this.#details,
+          error: errorMessage(error),
+        })
+        return null
+      })
+    if (!pending) return false
+    const price = formatPrice(pending.price)
+    await this.#alert({
+      kind: 'settlement_admin_finalize',
+      message: `${this.#ticker} ${this.#tradingDay}: admin price ${price} is pending; the admin must finalize it`,
+      details: { ...this.#details, adminPrice: price, closeTs: this.#closeMs / 1000 },
+    })
+    return true
   }
 
   async #escalate(kind: EscalationKind): Promise<void> {
@@ -250,8 +261,9 @@ class TickerDaySettler {
 /**
  * Long-running settlement loop. Finds open markets on-chain, groups them by ticker and day, and
  * runs the escalation schedule for each from `close_ts`: 30 s polling for 15 minutes, the first
- * alert and staggered 3-minute polling at +15, the second alert at +50 and admin finalization at
- * +60. The phase comes from the clock, so a restart resumes where it should.
+ * alert and staggered 3-minute polling at +15, the second alert at +50 and, at +60, an alert
+ * telling the admin to finalize a pending admin price. The phase comes from the clock, so a
+ * restart resumes where it should.
  */
 export async function runSettlementJob(deps: SettlementJobDeps): Promise<void> {
   const { chain, clock, log, signal } = deps

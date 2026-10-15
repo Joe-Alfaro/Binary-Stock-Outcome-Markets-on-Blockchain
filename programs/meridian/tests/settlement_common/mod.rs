@@ -483,10 +483,16 @@ impl Env {
         }
     }
 
-    /// Anyone finalizes the pending AAPL admin price for `DAY`.
+    /// The admin finalizes the pending AAPL admin price for `DAY` (admin-only, D93).
     pub fn finalize(&mut self) -> TransactionResult {
-        let ix = self.ix_finalize_admin_settle(&Pubkey::default(), ticker("AAPL"), DAY);
-        self.send_as_anyone(ix)
+        let admin = self.admin.insecure_clone();
+        self.finalize_as(&admin)
+    }
+
+    /// `signer` tries to finalize the pending AAPL admin price for `DAY`.
+    pub fn finalize_as(&mut self, signer: &Keypair) -> TransactionResult {
+        let ix = self.ix_finalize_admin_settle(&signer.pubkey(), ticker("AAPL"), DAY);
+        self.send_one(ix, signer)
     }
 
     // ---- redeem ------------------------------------------------------------------------------

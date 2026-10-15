@@ -12,6 +12,7 @@ export const DISCRIMINATORS = {
   Market: [219, 190, 213, 55, 0, 227, 198, 154],
   OrderBook: [55, 230, 125, 218, 149, 39, 65, 248],
   Config: [155, 12, 170, 224, 30, 250, 204, 130],
+  TickerDay: [140, 217, 51, 148, 18, 80, 48, 168],
   LatestPrice: [37, 138, 32, 102, 133, 25, 241, 164],
 } as const
 
@@ -180,6 +181,58 @@ export function decodeMarket(data: Uint8Array): MarketAccount {
 export function decodeConfigUsdcMint(data: Uint8Array): PublicKey {
   if (!startsWith(data, DISCRIMINATORS.Config)) throw new Error('not a Config account')
   return new Reader(data, 8 + 32 + 32).pubkey()
+}
+
+/** `OracleSlot`: kind (1), relay signer (32), 7 feed IDs (32 each), verifier (32), level (1). */
+const ORACLE_SLOT_SIZE = 1 + 32 + 7 * 32 + 32 + 1
+
+/** The `Config` fields the Admin page reads (R70). */
+export interface ConfigAdminFields {
+  admin: PublicKey
+  proposeDelaySecs: number
+  finalizeDelaySecs: number
+  paused: boolean
+}
+
+export function decodeConfigAdmin(data: Uint8Array): ConfigAdminFields {
+  if (!startsWith(data, DISCRIMINATORS.Config)) throw new Error('not a Config account')
+  const r = new Reader(data, 8)
+  const admin = r.pubkey()
+  // automation_authority, usdc_mint, tickers[7], oracle_slots[2], max_staleness, max_conf_bps
+  r.skip(32 + 32 + 7 * TICKER_LEN + 2 * ORACLE_SLOT_SIZE + 4 + 2)
+  const proposeDelaySecs = r.u32()
+  const finalizeDelaySecs = r.u32()
+  const paused = r.bool()
+  return { admin, proposeDelaySecs, finalizeDelaySecs, paused }
+}
+
+export interface TickerDayAccount {
+  ticker: string
+  /** `YYYYMMDD`. */
+  tradingDay: number
+  closeTs: number
+  final: boolean
+  /** Whole cents (expo −2), or `null` when none is pending. */
+  pendingAdminPriceCents: bigint | null
+}
+
+export function decodeTickerDay(data: Uint8Array): TickerDayAccount {
+  if (!startsWith(data, DISCRIMINATORS.TickerDay)) throw new Error('not a TickerDay account')
+  const r = new Reader(data, 8)
+  const ticker = r.ticker()
+  const tradingDay = r.u32()
+  const closeTs = Number(r.i64())
+  const final = r.u8() === 1
+  r.skip(8 + 4 + 1) // settle_price, settle_expo, settle_source
+  const pendingAdminPrice = r.i64()
+  const pendingAdminAt = r.i64()
+  return {
+    ticker,
+    tradingDay,
+    closeTs,
+    final,
+    pendingAdminPriceCents: pendingAdminAt === 0n ? null : pendingAdminPrice,
+  }
 }
 
 export interface LatestPriceAccount {

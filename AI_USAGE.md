@@ -463,3 +463,12 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   script's own and special variables) and added the `VALIDATOR_*` test ports and waits to
   `.env.example`.
 - **Human review:** pending MR review.
+
+## 2026-10-15 — Admin-only finalize and the Admin page (`feat/admin`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the test and implementation workers.
+- **What the AI did:** wrote the R10, R36, R37 and R70 tests, then made `finalize_admin_settle`
+  admin-only, replaced the worker's +60 finalize with a `settlement_admin_finalize` alert (the
+  worker holds no admin key), added the SDK's propose, finalize and pause builders, and built the
+  web app's Admin link and `/admin` page with per-ticker-day button timing in ET.
+- **Human review:** pending MR review.

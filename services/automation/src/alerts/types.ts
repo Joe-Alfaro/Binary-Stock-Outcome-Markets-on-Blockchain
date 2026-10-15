@@ -3,6 +3,8 @@ export type AlertKind =
   | 'morning_job_failure'
   | 'settlement_first_alert'
   | 'settlement_second_alert'
+  /** +60 min with a pending admin price: the admin must finalize it; the worker never does (D93). */
+  | 'settlement_admin_finalize'
   | 'admin_price_mismatch'
   | 'invariant_failure'
 

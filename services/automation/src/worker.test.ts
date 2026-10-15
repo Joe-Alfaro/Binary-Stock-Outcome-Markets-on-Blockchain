@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import anchor from '@anchor-lang/core'
 import { PriceSourceError, createMockSource } from '@meridian/price-providers'
@@ -94,6 +95,29 @@ describe('worker plumbing', () => {
     assert.equal(health.snapshot().lastScanAt, null)
     await chain.listOpenMarkets()
     assert.equal(health.snapshot().lastScanAt, '1970-01-01T00:00:01.000Z')
+  })
+})
+
+// R37, R43, D93: finalize_admin_settle is admin-only, and the worker holds no admin key.
+describe('the worker holds no admin key', () => {
+  const sourceOf = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
+
+  it('reads no admin key from the environment', () => {
+    const settings = loadChainSettings({
+      [KEY]: '/keys/automation.json',
+      ADMIN_KEYPAIR: '/keys/admin.json',
+    })
+    assert.equal(JSON.stringify(settings).includes('/keys/admin.json'), false)
+    ;['./worker.ts', './main.ts', './jobs/settlement.ts'].forEach((path) => {
+      assert.doesNotMatch(sourceOf(path), /ADMIN_KEYPAIR/, `${path} never loads the admin key`)
+    })
+  })
+
+  it('gives the jobs a chain client with no finalize_admin_settle', () => {
+    const clock = new FakeClock(1_000)
+    const chain = withScanHealth(new FakeChainClient(clock), createHealthState(), clock)
+    assert.equal('finalizeAdminSettle' in chain, false)
+    assert.doesNotMatch(sourceOf('./jobs/settlement.ts'), /finalizeAdminSettle/)
   })
 })
 
