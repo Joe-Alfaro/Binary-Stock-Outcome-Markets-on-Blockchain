@@ -443,3 +443,12 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   `TEST_RESULTS.md` with the counts, durations, requirement coverage, property tests and known
   limits, linked from the README.
 - **Human review:** pending MR review.
+
+## 2026-10-15 — make dev with the Alpaca source (`feat/make-dev-alpaca`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the test and implementation workers.
+- **What the AI did:** wrote the D94 tests, then added `make dev`'s `--source` option (and
+  `RELAY_1_SOURCE`), which checks the Alpaca keys up front and hands them to the worker only,
+  never printing them; let the demo relay run on a live source, replaying the recorded close for
+  demo settlement; pointed the web app's charts at the local worker; updated the README.
+- **Human review:** pending MR review.

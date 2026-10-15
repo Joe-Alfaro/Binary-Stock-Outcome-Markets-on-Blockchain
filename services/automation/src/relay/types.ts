@@ -59,7 +59,8 @@ export interface RelayPublisherOptions {
   log: LineWriter
   /**
    * Demo mode: replays a recorded close re-stamped to the demo `close_ts`, labeled
-   * `replayed: true` in every log line. Only the `mock` source is allowed.
+   * `replayed: true` in every log line. With a live source (alpaca) live prices still come from
+   * it and are not labelled replayed (D94).
    */
   demo?: boolean
 }

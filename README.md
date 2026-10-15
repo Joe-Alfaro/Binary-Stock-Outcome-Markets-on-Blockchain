@@ -80,6 +80,15 @@ keypairs just deployed, and the web app gets relay signer 1's public key (never 
 live prices. On a local validator the script airdrops SOL to every role key, so no funding is
 needed. `make dev ARGS=--dry-run` prints the steps without running them.
 
+The worker runs on the `mock` source by default, even with Alpaca keys in `.env`. To see real
+prices locally, run `make dev ARGS='--source alpaca'` (or set `RELAY_1_SOURCE=alpaca`; `--source`
+wins). The alpaca source needs `ALPACA_API_KEY` and `ALPACA_API_SECRET`; without them `make dev`
+stops before starting anything and names the missing variables. The keys go to the worker only and
+are never printed. Demo mode stays on: live prices, the charts and previous closes come from
+Alpaca, while each demo market settles from a replayed close (the recorded AAPL close of
+2026-10-12, and the hand-written mock fixtures for the other tickers), labelled `replayed` in the
+worker's log. The worker listens on port 8080, and the web app's charts read its price route there.
+
 `make gates` runs every quality gate (formatting, lint, type checks, clippy and all test suites).
 `make test` runs only the tests. `make e2e` runs the Playwright specs locally against a private
 validator and `next dev` with a flag-gated test wallet; it isn't part of the MR pipeline.

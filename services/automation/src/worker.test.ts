@@ -131,6 +131,43 @@ describe('startWorker relay configuration', () => {
   })
 })
 
+// R44, R67, D94: `make dev` runs the worker in demo mode on the alpaca source when asked. The
+// worker starts: live prices and previous closes come from Alpaca, demo closes from the replay.
+describe('startWorker in demo mode on the alpaca source (D94)', () => {
+  const key = (keypair = Keypair.generate()) => JSON.stringify([...keypair.secretKey])
+  const env = {
+    [KEY]: key(),
+    RELAY_SIGNER_1_KEYPAIR: key(),
+    // Nothing listens here; the worker is stopped right after it starts.
+    SOLANA_RPC_URL: 'http://127.0.0.1:1',
+    DEMO_MODE: 'true',
+    RELAY_1_SOURCE: 'alpaca',
+    ALPACA_API_KEY: 'test-key-id-PK0000',
+    ALPACA_API_SECRET: 'test-secret-0000000000',
+  }
+  // Saturday 2026-10-17: no morning job, no session, no close.
+  const SATURDAY = Date.UTC(2026, 9, 17, 15, 0)
+
+  it('starts and stops without refusing the source', { timeout: 10_000 }, async () => {
+    const clock = new FakeClock(SATURDAY)
+    const mock = createMockSource({ now: () => Math.floor(clock.now() / 1000) })
+    const alpaca = {
+      name: 'alpaca',
+      prepareClose: mock.prepareClose.bind(mock),
+      previousClose: mock.previousClose.bind(mock),
+      latest: mock.latest.bind(mock),
+    }
+    const worker = startWorker(createHealthState(), env, {
+      clock,
+      log: () => {},
+      alertSinks: [],
+      source: alpaca,
+    })
+    worker.stop()
+    await worker.done
+  })
+})
+
 // R32: the worker reads ORACLE_SLOT_1 and ORACLE_SLOT_2, so a slot switches by env vars alone.
 describe('startWorker oracle slot configuration (R32)', () => {
   const key = (keypair = Keypair.generate()) => JSON.stringify([...keypair.secretKey])
