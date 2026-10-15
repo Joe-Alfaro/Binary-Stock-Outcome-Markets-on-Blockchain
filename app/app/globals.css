@@ -152,6 +152,30 @@ a {
   color: var(--text);
 }
 
+/* Narrow screens: brand and wallet share the first row, the nav wraps onto its own row below. */
+@media (max-width: 640px) {
+  .site-header__inner {
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0.625rem 1rem;
+  }
+
+  .site-nav {
+    order: 1;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+  }
+
+  .site-header .wallet {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-left: auto;
+    min-width: 0;
+  }
+}
+
 .site-main {
   max-width: 1200px;
   margin: 0 auto;

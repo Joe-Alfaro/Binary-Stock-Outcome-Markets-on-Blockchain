@@ -14,6 +14,14 @@ const BRACKET_READ = new RegExp(
 const DESTRUCTURE =
   /\{([^{}]*)\}\s*(?::[^={}]*)?=\s*\b(?:process\.)?env\b(?!\s*\??\.\s*[\w[]|\s*\[)/g
 
+/** `$NAME` or `${NAME…}`, which also matches a read nested in another's default. */
+const SHELL_REF = new RegExp(`\\$(?:(${NAME})\\b|\\{#?(${NAME})\\b)`, 'g')
+/** `NAME=…`, alone or after `export`, `local`, `readonly` or `declare`, or as a command prefix. */
+const SHELL_ASSIGN = new RegExp(`(?:^|[\\s;&|(])(${NAME})\\+?=`, 'gm')
+const SHELL_FOR = new RegExp(`\\bfor\\s+(${NAME})\\s+in\\b`, 'g')
+/** `read [-flags] NAME…`. */
+const SHELL_READ_BUILTIN = new RegExp(`\\bread(?:\\s+-\\w+)*((?:\\s+${NAME})+)`, 'g')
+
 const SECRET_NAME = /SECRET|TOKEN|KEYPAIR|PRIVATE|PASSWORD|PASSPHRASE|API_KEY|MNEMONIC|SEED/
 const BASE58_KEY = /^[1-9A-HJ-NP-Za-km-z]{64,}$/
 const BYTE_ARRAY = /^\[\s*\d{1,3}(\s*,\s*\d{1,3}){31,}\s*\]$/
@@ -31,6 +39,33 @@ export function findEnvReads(source: string): string[] {
       const name = part.split(':')[0]?.split('=')[0]?.trim() ?? ''
       if (new RegExp(`^${NAME}$`).test(name)) names.add(name)
     })
+  }
+  return [...names]
+}
+
+/**
+ * Names of the environment variables a shell script reads: `$NAME`, `${NAME}` and
+ * `${NAME:-default}`, leaving out positional and special parameters and the script's own
+ * variables (assigned, `local`, `export NAME=…`, `for NAME in`, `read NAME`).
+ */
+export function findShellEnvReads(source: string): string[] {
+  const code = source
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n')
+  const own = new Set<string>()
+  for (const match of code.matchAll(SHELL_ASSIGN)) own.add(match[1] as string)
+  for (const match of code.matchAll(SHELL_FOR)) own.add(match[1] as string)
+  for (const match of code.matchAll(SHELL_READ_BUILTIN)) {
+    ;(match[1] as string)
+      .trim()
+      .split(/\s+/)
+      .forEach((name) => own.add(name))
+  }
+  const names = new Set<string>()
+  for (const match of code.matchAll(SHELL_REF)) {
+    const name = (match[1] ?? match[2]) as string
+    if (!own.has(name)) names.add(name)
   }
   return [...names]
 }
