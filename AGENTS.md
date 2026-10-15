@@ -125,8 +125,8 @@ practical.
 
 These are never committed. Read them when useful; don't copy them into the repo.
 
-- Project docs (source spec, decisions): `Docs/` in the main checkout at
-  `/Users/joealfaro/Documents/Binary Stock Outcome Markets on Blockchain/Docs/`
+- Project docs (source spec, decisions): `Docs/` in the main checkout, the first path
+  `git worktree list` prints. The checkout has moved before, so don't hard-code its path.
 - Requirements:
   `/Users/joealfaro/.ao/data/artifacts/binary-stock-outcome-markets-on-blockchain-1/requirements.md`
 

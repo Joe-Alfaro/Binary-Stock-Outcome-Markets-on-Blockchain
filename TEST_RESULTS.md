@@ -11,7 +11,8 @@ One full local run of every suite and quality gate. Test names carry the require
 
 ## Summary
 
-1,340 tests, 1,340 passed, 0 failed, 0 skipped. Every quality gate passed.
+1,340 tests, 1,340 passed, 0 failed. One suite of 4 checks was skipped (the R64 names scan, see
+below) and then passed when run on its own. Every quality gate passed.
 
 | Suite                            | Command                                | Pass  | Fail | Skip | Time    |
 | -------------------------------- | -------------------------------------- | ----- | ---- | ---- | ------- |
@@ -20,11 +21,11 @@ One full local run of every suite and quality gate. Test names carry the require
 | Automation worker                | `npm test -w services/automation`      | 261   | 0    | 0    | 10 s    |
 | Web app (unit, jsdom)            | `npm test -w app`                      | 132   | 0    | 0    | 39 s    |
 | Ops scripts                      | `npm run test:scripts`                 | 141   | 0    | 0    | 49 s    |
-| Docs checks                      | `npm run test:docs`                    | 30    | 0    | 0    | 1 s     |
+| Docs checks                      | `npm run test:docs`                    | 30    | 0    | 4    | 1 s     |
 | Rust (programs, math crate)      | `cargo test --workspace`               | 263   | 0    | 0    | 3 m 9 s |
 | Anchor integration and lifecycle | `./scripts/anchor-test.sh`             | 60    | 0    | 0    | 12 m 7s |
 | Browser end to end               | `make e2e`                             | 9     | 0    | 0    | 2 m 33s |
-| **Total**                        |                                        | 1,340 | 0    | 0    |         |
+| **Total**                        |                                        | 1,340 | 0    | 4    |         |
 
 Times are wall clock. The Rust time includes compiling the test binaries, and the end-to-end time
 includes starting the validator, deploying, bootstrapping and starting the web app (the Playwright
@@ -48,7 +49,7 @@ specs themselves took 41 s).
 | Automation worker                | Morning job (R12, R15), settlement escalation and latency (R37, R38), admin fallback (R36), relay publisher (R40), alert sinks and the invariant audit (R46), latest prices (R47), chart and closed-state routes (R66-R68), Railway config (R65)                                                                                                                  |
 | Web app                          | Wallet (R48), Landing, Markets, Trade, Portfolio and History pages (R49-R53), signing and errors (R54), finality (R55), live book and prices (R22, R47), both book views (R29), position constraint (R28), demo mode (R44), axe checks (R56), Markets cards (R66, R68, R69)                                                                                       |
 | Ops scripts                      | `make dev`, `make deploy-devnet`, `make demo` and bootstrap (R59-R61), mainnet guard (R45), key separation (R43), `.env.example` (R62), Railway config (R65), e2e harness (R22, R56)                                                                                                                                                                              |
-| Docs checks                      | README claims that tests can check: no regulatory claims and no company names (R63, R64), rent and compute figures (R19), vault donations (R6), adding strikes (R13), demo mode (R44)                                                                                                                                                                             |
+| Docs checks                      | README claims that tests can check: no regulatory claims (R63), no company or program names in files, commits or branches (R64), rent and compute figures (R19), vault donations (R6), adding strikes (R13), demo mode (R44)                                                                                                                                      |
 | Rust                             | Every instruction of both programs on an in-process SVM: config (R10, R41, R42), markets and strikes (R11-R13), trading calendar (R14), mint, merge and redeem (R3-R5), order book, matching, cancel and limits (R16-R21), the four trade paths (R23-R27), relay oracle (R30), settlement and price adapters (R31-R36), demo mode (R44), and the invariants below |
 | Anchor integration and lifecycle | On a local validator: the full lifecycle create → mint → trade (all four paths) → settle → redeem with a multi-user scenario (R57), `make demo` on localnet (R61), vault donation (R6), compute and rent (R19), unwind and close-out through the SDK (R28, R52), the worker end to end with Pyth and the relay (R32, R40, R46, R47)                               |
 | Browser end to end               | Markets card layout at 1280, 1024, 768 and 390 px (R69), axe checks on Trade and Portfolio with a wallet connected (R56), a new order shows in the book within 2 s (R22), Buy Yes in one signature (R23), close out and redeem in one signature (R52)                                                                                                             |
@@ -78,7 +79,10 @@ runs axe on the wallet picker and the other pages.
 
 ## Known skips and limits
 
-- No test was skipped.
+- **R64 names scan skipped in the full run.** It reads the names from a file outside the repo named
+  by `MERIDIAN_FORBIDDEN_NAMES_FILE` and skips its 4 checks when that's unset, as it is in CI.
+  node:test counts a skipped suite as 0 skipped tests, so the summary line hides it. Run separately
+  with a names file, all 4 checks passed on this branch.
 - **Devnet not yet run.** Everything above ran locally. `make demo` on devnet and a devnet run of
   the lifecycle are still to do, as is the first Railway deploy.
 - The admin role in the web app (R70, added 2026-10-15) has no tests yet.
