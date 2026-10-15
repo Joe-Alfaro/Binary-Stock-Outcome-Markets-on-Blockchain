@@ -424,6 +424,17 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   close" while the market is closed.
 - **Human review:** pending MR review.
 
+## 2026-10-15 — ARCHITECTURE refresh for current main (`docs/architecture-refresh`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as a documentation worker.
+- **What the AI did:** read the code on `main` and updated `ARCHITECTURE.md` to match it: the
+  Alpaca source (stream and REST, SIP and IEX feeds, config variables, key-based default with
+  `mock` as the fallback, Yahoo opt-in), the cached intraday chart route, the Markets card states,
+  the calendar shared with the app, the private-port test tooling, the admin-only finalize and
+  Admin page decision (marked in progress where `main` doesn't have it yet), the requirement table
+  for R66-R70 and the risks.
+- **Human review:** pending MR review.
+
 ## 2026-10-15 — Test results (`docs/test-results`)
 
 - **Tool:** Claude Code (Claude Opus 5.5), running as a docs worker.

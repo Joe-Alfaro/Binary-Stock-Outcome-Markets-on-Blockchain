@@ -2,7 +2,7 @@
 
 Meridian is a non-custodial app for trading same-day binary outcome contracts on the closing prices of seven large-cap US stocks (AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA). Each contract asks "Will [TICKER] close at or above [STRIKE] today?" A Yes token pays $1.00 USDC if it does and a No token pays $1.00 USDC if it doesn't, so Yes + No always equals $1.00. Markets are created automatically each morning, trade on an on-chain order book during market hours, settle automatically from a price oracle after the close, and pay winners from a fully collateralized vault.
 
-This document describes how Meridian is built. Requirement IDs (R1–R65) refer to the project's requirements list; §12 maps every one of them to the components below, and §13 explains how each gotcha is handled.
+This document describes how Meridian is built. Requirement IDs (R1–R70) refer to the project's requirements list; §12 maps every one of them to the components below, and §13 explains how each gotcha is handled.
 
 ---
 
@@ -14,13 +14,13 @@ This document describes how Meridian is built. Requirement IDs (R1–R65) refer 
 | On-chain programs | Rust + Anchor: `meridian` (markets, book, settlement) and `meridian_oracle` (relay price records) |
 | Order book | Our own minimal CLOB inside the program, one book per strike (Yes vs USDC). Trader balances live in seats inside the book account, so a taker never has to pass maker accounts. |
 | Price oracles | Two oracle slots with a plug-and-play adapter. The MVP and demo run our own **Meridian Price Relay** in slot 1 and leave slot 2 **disabled**. Pyth or Chainlink Data Streams can be switched into either slot by configuration (§5.6). Why a custom oracle: §5.1. |
-| Market data | Relay data source A is the Yahoo Finance chart API (free, keyless). A `mock` source replays recorded fixtures for tests and offline use. |
+| Market data | Alpaca market data (websocket stream for live prices, REST for bars) when its keys are set; otherwise a `mock` source that replays recorded fixtures for tests and offline use. The keyless Yahoo Finance chart API stays selectable. |
 | Closing price | Official close → regular-session price stamped exactly at `close_ts` → linear interpolation between the nearest regular-session prices on each side of `close_ts`, each within 5 minutes |
-| Settlement | One canonical close record per (signer, ticker, trading day), and one settlement price per ticker and day shared by every strike. Permissionless `settle_market`. Escalation: 30 s polling for 15 minutes, first alert and admin propose at +15 min, staggered polling, second alert at +50, admin finalize at +60. |
+| Settlement | One canonical close record per (signer, ticker, trading day), and one settlement price per ticker and day shared by every strike. Permissionless `settle_market`. Escalation: 30 s polling for 15 minutes, first alert and admin propose at +15 min, staggered polling, second alert at +50, admin-only finalize from +60 with the worker alerting the admin (D93, in progress). |
 | Pair exit | **Merge** instruction: 1 Yes + 1 No → $1.00 USDC at any time before settlement |
 | Strikes | Fixed ±3%, ±6%, ±9% plus the rounded previous close, rounded to $10 and deduplicated |
 | Morning job | Starts 6:00 AM ET, all markets created by 8:00 AM ET |
-| Frontend | TypeScript, React, Next.js, Solana wallet adapter. Live stock prices come from on-chain oracle accounts. |
+| Frontend | TypeScript, React, Next.js, Solana wallet adapter. Live stock prices come from on-chain oracle accounts; the Markets charts read a cached intraday route on the worker. An Admin page is shown only to the admin wallet. |
 | Automation | TypeScript / Node.js worker in the same repo. Finds markets on-chain; holds no state that a restart can lose. |
 | Hosting | Railway for the web app and the automation worker |
 
@@ -31,13 +31,14 @@ This document describes how Meridian is built. Requirement IDs (R1–R65) refer 
 ```mermaid
 flowchart LR
   subgraph OffChain[Off-chain]
-    SrcA[(Source A<br/>Yahoo chart API<br/>or mock fixtures)]
+    SrcA[(Source A<br/>Alpaca stream + REST,<br/>Yahoo or mock fixtures)]
     subgraph Worker[Automation worker]
       Sched[Scheduler<br/>trading calendar]
       Morning[Morning job<br/>6:00 AM ET]
       Settle[Settlement job<br/>from close]
       Relay1[Relay publisher 1]
       Alerts[AlertSink<br/>console, webhook]
+      Intraday[Intraday route<br/>/prices/intraday, 60 s cache]
     end
     Web[Next.js web app]
     Admin[Admin CLI]
@@ -52,6 +53,7 @@ flowchart LR
   Wallet((User wallet))
 
   SrcA --> Relay1 --> Oracle
+  SrcA --> Intraday -- chart series --> Web
   Sched --> Morning --> Core
   Sched --> Settle --> Core
   Oracle -- close records --> Core
@@ -69,13 +71,13 @@ flowchart LR
 | --- | --- | --- |
 | `meridian` program | `programs/meridian` | Config, strike markets, Yes/No mints, USDC vaults with an internal collateral counter, order books, mint/merge/redeem, per-ticker-day settlement, admin fallback, pause |
 | `meridian_oracle` program | `programs/meridian_oracle` | Relay signer registry, append-only `PriceUpdate` records, write-once `CloseRecord`s used for settlement, and one overwritten `LatestPrice` account per ticker for display |
-| SDK | `packages/sdk` | TypeScript client generated from the Anchor IDLs, transaction builders for the four trade paths, PDA helpers, the No-view and cost-basis math, shared closing-price and strike math, the trading calendar, and the mainnet guard |
-| Price providers | `packages/price-providers` | Off-chain `PriceProvider` and `RelaySource` interfaces and implementations: `yahoo`, `mock`, Pyth, Chainlink Data Streams |
-| Automation worker | `services/automation` | Scheduler, morning job, settlement job with escalation, relay publisher (close and live prices), alert sinks, health endpoint |
-| Web app | `app` | Landing, Markets, Trade, Portfolio and History pages |
+| SDK | `packages/sdk` | TypeScript client generated from the Anchor IDLs, transaction builders for the four trade paths, PDA helpers, the No-view and cost-basis math, shared closing-price and strike math, and the mainnet guard |
+| Price providers | `packages/price-providers` | Off-chain `PriceProvider`, `LivePriceProvider` and `IntradayPriceProvider` interfaces and the relay sources `alpaca`, `yahoo` and `mock` (plus demo replay), Pyth, Chainlink Data Streams, and a fake Alpaca websocket server for tests |
+| Automation worker | `services/automation` | Scheduler, NYSE trading calendar (also imported by the web app), morning job, settlement job with escalation, relay publisher (close and live prices), alert sinks, health endpoint and the intraday price route |
+| Web app | `app` | Landing, Markets, Trade, Portfolio and History pages, and the admin-only Admin page (in progress, §7) |
 | Admin CLI | `services/automation/src/cli` | Initialize config, update config (including slot switches), add strike, propose and finalize admin price, pause and unpause |
-| Scripts | `scripts` | Devnet deploy, config bootstrap, rent measurement and the full lifecycle demo. All call the mainnet guard first. |
-| Shared fixtures | `fixtures` | Strike cases, closing-price cases, recorded Yahoo responses and sample Pyth/Chainlink payloads, read by both the Rust and TypeScript tests |
+| Scripts | `scripts` | Devnet deploy, config bootstrap, rent measurement, the full lifecycle demo, the `make e2e` stack and the private-port Anchor test runner. All chain scripts call the mainnet guard first. |
+| Shared fixtures | `fixtures`, `packages/price-providers/fixtures` | Strike and closing-price cases read by both the Rust and TypeScript tests; recorded Yahoo and Alpaca responses and sample Pyth/Chainlink payloads for the provider tests |
 | Integration tests | `tests` | Anchor tests (Mocha) on a local validator |
 
 ---
@@ -122,7 +124,7 @@ flowchart LR
 | `settle_funds` | Seat owner | Withdraws free Yes and USDC from the book's escrow vaults to the owner's token accounts. Releases the seat when it is empty. Allowed at any time. |
 | `settle_market` | Anyone, except for third-party oracle slots (§4.3) | Requires `now ≥ close_ts`. If the `TickerDay` is already `Final`, copies its price. Otherwise reads the slot's canonical close record (§4.1), applies the closing price rule, writes the price to the `TickerDay` (marking it `Final`), then writes the outcome to the market. Emits `MarketSettled`, and `AdminPriceMismatch` if a pending admin price differed. Fails on a settled market. Works while paused. |
 | `propose_admin_price(ticker, trading_day, price)` | Admin | Allowed from `close_ts + admin_propose_delay_secs` (+900) while the `TickerDay` is not `Final`. Stores a pending price for the whole ticker and day. Replaces any earlier proposal. The admin enters a price, never an outcome. |
-| `finalize_admin_settle(ticker, trading_day)` | Anyone | Allowed from `close_ts + admin_finalize_delay_secs` (+3600) when a price is pending and the `TickerDay` is not `Final`. Marks the `TickerDay` `Final` with source admin. Each strike then settles through `settle_market`, which copies the price. |
+| `finalize_admin_settle(ticker, trading_day)` | Admin (D93; on `main` it is still callable by anyone until the admin-finalize change merges) | Allowed from `close_ts + admin_finalize_delay_secs` (+3600) when a price is pending and the `TickerDay` is not `Final`. Marks the `TickerDay` `Final` with source admin. Each strike then settles through `settle_market`, which copies the price. |
 | `redeem(yes_amount, no_amount)` | Anyone | After settlement only. Burns the given tokens and pays `1_000_000` per winning token and 0 per losing token from the vault, decrementing `collateral`. Redeeming only losing tokens burns them and pays 0 without an error. Works while paused. Never expires. |
 | `pause` / `unpause` | Admin | Halts `mint_pair` and `place_order` across all markets. Everything else keeps working. |
 
@@ -236,7 +238,9 @@ Times are relative to `close_ts`. On a normal day `close_ts` is 4:00 PM ET. The 
 | +0:00 to +0:15 | Keep polling every 30 s: about 30 attempts on slot 1. No alert. | — |
 | +0:15 | No valid price yet: **first admin alert**, exactly once. Switch to staggered polling: each slot once every 3 min, offset by 1 min (slot 1 at +0:16, +0:19, …; slot 2 at +0:17, +0:20, …). With slot 2 disabled, slot 1 is polled every 3 min. | `propose_admin_price` allowed (`admin_propose_delay_secs = 900`) |
 | +0:50 | No valid price yet: **second admin alert** | — |
-| +1:00 | If an admin price is pending, call `finalize_admin_settle`, then `settle_market` for each strike. Otherwise keep staggered polling until an oracle answers or the admin proposes, then settle immediately. | `finalize_admin_settle` allowed (`admin_finalize_delay_secs = 3600`) |
+| +1:00 | If an admin price is pending, **alert the admin to finalize it**. The worker holds no admin key and never finalizes (D93). Once the admin's `finalize_admin_settle` lands, the worker calls `settle_market` for each strike. Otherwise keep staggered polling until an oracle answers or the admin proposes. | `finalize_admin_settle` allowed for the admin only (`admin_finalize_delay_secs = 3600`) |
+
+**In progress.** On `main` today the worker still calls `finalize_admin_settle` itself at +60 and the instruction accepts any signer. The D93 change makes the instruction admin-only and replaces the worker's call with the +60 alert. The rest of this table already matches `main`.
 
 The first valid answer from either slot settles the ticker and stops all polling for it. Tickers settle independently, so one ticker's oracle trouble delays no other. An oracle answer before finalization always beats a pending admin price; when the values differ, the program emits `AdminPriceMismatch` and the worker logs both values and alerts the admin.
 
@@ -304,30 +308,30 @@ pub struct NormalizedPrice {
 
 The closing price rule (§4.2) only ever sees `NormalizedPrice` and imports no concrete provider, so it is identical whichever oracle is configured.
 
-**Off-chain**, the worker uses one interface per slot:
+**Off-chain**, `packages/price-providers` defines three small interfaces:
 
 ```ts
 interface PriceProvider {
   name: string
-  // Fetch and post (or prepare) the inputs for this ticker's close.
-  // Returns what settle_market needs, or null if no valid shape exists yet.
-  prepareClose(ticker: Ticker, tradingDay: string, closeTs: number): Promise<SettlementInputs | null>
-  // Previous close for strike calculation, with the date it belongs to.
-  previousClose(ticker: Ticker, tradingDay: string): Promise<{ price: number; date: string }>
+  // The updates for this ticker's close, or null if no valid shape exists yet.
+  prepareClose(ticker: string, closeTs: number): Promise<SettlementInputs | null>
+  // Previous close for strikes. Rejects with `stale` when the newest close is older than the day.
+  previousClose(ticker: string, previousTradingDay: string): Promise<PreviousClose>
+}
+
+interface LivePriceProvider {
+  name: string
+  latest(ticker: string): Promise<NormalizedPrice | null>   // display only
+}
+
+interface IntradayPriceProvider {
+  name: string
+  // Regular-session 1-minute closes in [fromTs, toTs], oldest first (Markets chart only).
+  intraday(ticker: string, fromTs: number, toTs: number): Promise<IntradayPoint[]>
 }
 ```
 
-The relay provider delegates to a `RelaySource`, which is the only part that talks to a market-data API:
-
-```ts
-interface RelaySource {
-  name: 'yahoo' | 'mock'
-  officialClose(ticker: Ticker, closeTs: number): Promise<SourcePrice | null>
-  bars1m(ticker: Ticker, fromTs: number, toTs: number): Promise<Bar[]>
-  previousClose(ticker: Ticker, tradingDay: string): Promise<{ price: number; date: string }>
-  latest(ticker: Ticker): Promise<SourcePrice | null>
-}
-```
+A relay source implements all three (`RelaySource = PriceProvider & LivePriceProvider & IntradayPriceProvider`, plus an optional `close()` that shuts a websocket). It is the only part that talks to a market-data API. `createRelaySource(env, slot)` builds the one named by `RELAY_<slot>_SOURCE` (§5.5).
 
 ### 5.4 Meridian Price Relay (MVP and demo)
 
@@ -357,19 +361,38 @@ Every published value is logged with its source, timestamp and transaction signa
 
 ### 5.5 Data sources
 
-**Default source: Alpaca market data (`RELAY_1_SOURCE=alpaca`, R67, D81, D83, D84).** The default when `ALPACA_API_KEY` and `ALPACA_API_SECRET` are both set (otherwise `mock`). REST (`https://data.alpaca.markets/v2/stocks/…`, key pair in headers) serves daily and 1-minute bars and batched snapshots; the websocket (`wss://stream.data.alpaca.markets/v2/iex`) streams trades and quotes for the 7 tickers. The free plan's real-time data is IEX only, and SIP (consolidated) data is served only when it is older than about 15 minutes.
+**Selection.** `RELAY_1_SOURCE` picks the source: `alpaca`, `yahoo` or `mock`. Left empty, it is `alpaca` when `ALPACA_API_KEY` and `ALPACA_API_SECRET` are both non-blank, otherwise `mock`. So a fresh checkout without keys runs offline on `mock`, and adding the keys switches to live data with no other change. Naming `alpaca` without the keys is a startup error that names the missing variables. With `DEMO_MODE=true`, `mock` becomes the demo replay source (§6.5).
+
+**Default source: Alpaca market data (`RELAY_1_SOURCE=alpaca`, R67).** REST (`/v2/stocks/…`, key pair in headers) serves daily and 1-minute bars and batched snapshots; the websocket streams trades and quotes for the 7 tickers. The source only calls `/v2/stocks/…` routes, never orders, account or positions.
+
+| Variable | Meaning |
+| --- | --- |
+| `ALPACA_API_KEY`, `ALPACA_API_SECRET` | Required for `alpaca`. Read from env only; never committed or logged. |
+| `ALPACA_DATA_URL` | REST base. Empty means `https://data.alpaca.markets`. |
+| `ALPACA_STREAM_URL` | Websocket. Empty means `wss://stream.data.alpaca.markets/v2/iex` (the free plan's stream). Must be `ws(s)`. |
+| `ALPACA_API_ENDPOINT` | The trading API. Never used for data, except that a value whose host starts with `data.` is taken as the REST base. |
+
+Blank values count as unset, and an invalid URL is a startup error naming the variable.
+
+**Feeds.** The free plan's real-time data comes from one exchange (IEX). SIP (consolidated) data is served only once it is older than about 15 minutes; newer SIP requests get HTTP 403. So a REST request whose window ends more than 16 minutes ago asks SIP, anything newer asks IEX, and a SIP 403 still falls back to IEX. Two values never fall back: the official close and the previous close use SIP only, so neither ever comes from one exchange's volume.
+
+**Stream.** Opened lazily on the first `latest` call. Trades outside 09:30–16:00 ET (by their own timestamp) are dropped, so after hours `latest` keeps the day's last regular-session trade. Reconnects back off from 1 s doubling to 60 s and reset after a successful subscribe; an auth failure takes the same path. While the stream is down, one batched IEX snapshot request serves all 7 tickers, shared by concurrent calls for 5 s. The worker closes the stream when it stops.
 
 | Need | How |
 | --- | --- |
-| Official close (shape 1) | The SIP daily bar of the close day (equal to the closing-auction print), stamped `close_ts`, conf 0. While SIP is refused (the first ~15 minutes after close) there is none. |
-| Interpolation fallback (shape 3) | The D23 pair from 1-minute bars (SIP, IEX while SIP is refused): the last bar before close at `close_ts − 1` and the 16:00 bar's open at `close_ts + 1`, conf half the bar range. Never marked official; no bar after the closing minute is used. |
-| Previous close for strikes | The SIP daily bar dated the expected previous trading day; older means stale. |
-| Live display price | The stream's latest regular-session trade, conf half the quoted spread. While the stream reconnects (bounded exponential backoff), one batched IEX snapshot request serves all 7 tickers for a tick. |
-| Intraday chart (R66) | 1-minute bars, SIP for windows older than 15 minutes, otherwise IEX; after-hours bars dropped. |
+| Need | How |
+| --- | --- |
+| Official close (shape 1) | The SIP daily bar of the close day (equal to the closing-auction print), stamped in `[close_ts, close_ts + 300)`, conf 0. While SIP is refused (the first ~16 minutes after close) there is none. |
+| Interpolation fallback (shape 3) | A pair from 1-minute bars (SIP, IEX while SIP is refused): the last bar before close at `close_ts − 1` and the 16:00 bar's open at `close_ts + 1`, conf half the bar range. Never marked official; no bar after the closing minute is used. |
+| Previous close for strikes | The SIP daily bar dated the expected previous trading day, asked with `end = now − 16 min`. Older, or SIP refused, means `stale`. |
+| Live display price | The stream's latest regular-session trade, conf half the quoted spread; the IEX snapshot while the stream reconnects. |
+| Intraday chart (R66) | 1-minute bars by the feed rule above, regular session only. During the session the whole series is IEX, so it has no feed seam. |
 
-HTTP 429 backs off up to 10 minutes (failing fast meanwhile), a 401 or 403 is `unauthorized`, network errors are tried at most 3 times. `ALPACA_API_ENDPOINT` (the trading API) is never used for data.
+HTTP 429 fails fast while backing off (capped at 10 minutes), any other 401 or 403 is `unauthorized`, and a call makes at most 3 requests; network errors become `http`. Tests run against small captured fixtures in `packages/price-providers/fixtures/alpaca/` (with provenance) and a local RFC 6455 fake websocket server (`@meridian/price-providers/testing`); no test touches the network.
 
-**Source A: Yahoo Finance chart API (`RELAY_1_SOURCE=yahoo`).** Free and keyless. The relay uses the chart endpoint (`/v8/finance/chart/<TICKER>`) with regular-session data only:
+**Interaction with the relay's 3-minute wait.** The relay waits until `close_ts + 180 s` for an official close (§5.4), but on the free plan SIP refuses the close bar until about +16 min. So with Alpaca the close normally settles at shape 3 from the IEX bars around 4:00 PM, inside the 5-minute target, rather than at shape 1. If IEX has no 16:00 bar, the relay keeps polling and publishes the SIP official close once it is served.
+
+**Optional source: Yahoo Finance chart API (`RELAY_1_SOURCE=yahoo`).** Free and keyless, and used only when selected explicitly; it was the default before Alpaca and was too often rate-limited. The relay uses the chart endpoint (`/v8/finance/chart/<TICKER>`) with regular-session data only:
 
 | Need | How |
 | --- | --- |
@@ -377,12 +400,13 @@ HTTP 429 backs off up to 10 minutes (failing fast meanwhile), a 401 or 403 is `u
 | Interpolation fallback (shape 3) | 1-minute bars with pre/post-market excluded. The close of the last bar before `close_ts` is published with `publish_time = close_ts − 1`, and the first regular-session price at or after `close_ts` with `publish_time = close_ts + 1`. If Yahoo returns no regular-session data at or after the close, there is no shape 3, and the admin path applies. |
 | Previous close for strikes | Daily bars. The relay takes the close (not the adjusted close) of the bar dated the expected previous trading day. If the newest bar is older than that, the morning job treats it as stale (§6.1). |
 | Live display price | `meta.regularMarketPrice` and `regularMarketTime` during regular hours |
+| Intraday chart (R66) | `interval=1m` with `period1`/`period2` over the session window, regular session only |
 
-Timeouts, HTTP 429 and malformed responses are handled with backoff and tested against recorded responses in `fixtures/yahoo/`.
+Timeouts, HTTP 429 and malformed responses are handled with backoff and tested against recorded responses in `packages/price-providers/fixtures/yahoo/`.
 
 **Caveats.** The API is unofficial and undocumented: it can change shape or disappear without notice. Its terms don't clearly permit republishing prices, which is acceptable for a devnet project with no real funds but not beyond that. It may rate-limit or block cloud IP ranges such as Railway's. The relay keeps its request rate low (7 tickers per minute during the day, a few requests per ticker around the close), backs off on 429, and the README documents all three caveats. The `RelaySource` interface keeps it swappable.
 
-**`mock` source (`RELAY_1_SOURCE=mock`).** Replays recorded fixtures with no network. Used by every automated test, by `make dev` and for offline work. In demo mode it replays a recorded real close from a past trading day, re-stamped to the demo `close_ts` and labeled as replayed in its logs (§6.5).
+**`mock` source (`RELAY_1_SOURCE=mock`, or no Alpaca keys).** Replays recorded fixtures with no network, for all 7 tickers (some fixtures are hand-written in the recorded schema and marked so). Its intraday chart is a deterministic synthetic minute series around the recording's last price, not real data. Used by every automated test, by `make dev` and for offline work. In demo mode it replays a recorded real close from a past trading day, re-stamped to the demo `close_ts` and labeled as replayed in its logs (§6.5).
 
 **Second source (not in the MVP).** Slot 2 ships as `Disabled`. Adding a second source later means writing one `RelaySource` implementation, giving it its own signer key, and switching slot 2 to `MeridianRelay` (or to `Pyth` / `ChainlinkDataStreams`). Criteria for a second stock-data source: consolidated US prices, not a single venue; at most about 1 minute of delay; ideally an official daily close field; terms that allow publishing a derived settlement value.
 
@@ -426,7 +450,16 @@ To keep the relay running alongside, use slot 2 instead of slot 1 (`ORACLE_SLOT_
 
 ## 6. Automation worker
 
-One long-running Node.js process. All times are America/New_York, from a trading calendar module in `packages/sdk` that knows weekends, NYSE holidays and early closes for 2026 and 2027. The calendar data is checked into the repo and covered by tests. The worker keeps no state that matters across restarts: everything it needs is read from the chain.
+One long-running Node.js process. The worker keeps no state that matters across restarts: everything it needs is read from the chain.
+
+### Trading calendar
+
+All times are America/New_York, from the calendar in `services/automation/src/calendar`. It knows weekends, NYSE holidays and early closes (1:00 PM ET) for 2026 and 2027; the data is checked in and covered by tests. Besides the trading-day times the jobs use, it has two pure functions for display:
+
+- `chartSession(now)`: the session the Markets chart shows. Inside the regular session it is today, live, from 9:30 AM to now. Otherwise it is the most recent complete session: today's after the close, the previous trading day's before the open or on a non-trading day. The open counts as live, the close as closed.
+- `nextOpen(now)` and `reopenLabel(now)`: while the session is closed, 9:30 AM ET of the next open and the text "Reopens today|tomorrow|<Mon…Fri> 9:30 AM ET". Weekends and holidays are skipped; early closes don't move the next open. On a Saturday or Sunday the label always names the day ("Reopens Mon"); "tomorrow" is used only on weekdays. Both return null while the session is open.
+
+**Shared with the app.** The web app imports the calendar directly instead of asking the worker over HTTP, so the Closed state needs no extra data. `@meridian/automation` exports `./calendar` and `./calendar/next-open` as package subpaths, Next.js transpiles the package (`transpilePackages`), and those files import nothing but the calendar data, never Node built-ins. The tests for these functions force `TZ=Asia/Tokyo`, which is a calendar day ahead of ET every evening, so a function that used the host's time zone fails.
 
 ### 6.1 Morning job (trading days, 6:00 AM ET, must finish by 8:00 AM ET)
 
@@ -438,7 +471,7 @@ One long-running Node.js process. All times are America/New_York, from a trading
 ### 6.2 Settlement job
 
 - **Discovery on-chain.** The job lists open `Market` accounts with `getProgramAccounts` (filtered by account type and `status = Open`) and groups them by ticker and day. It rescans every minute from `close_ts` and every 5 minutes otherwise, so a market added at 2 PM with `add_strike` is picked up, a restart during the day loses nothing, and unsettled markets from earlier days are found.
-- **Phase from the clock.** The escalation phase for each ticker-day comes from `now − close_ts`, not from in-memory counters. After a restart past +15 min the job goes straight to staggered polling, and past +60 min it finalizes a pending admin price. A restart can repeat an alert that was already sent; it can't skip one.
+- **Phase from the clock.** The escalation phase for each ticker-day comes from `now − close_ts`, not from in-memory counters. After a restart past +15 min the job goes straight to staggered polling, and past +60 min it sends the finalize alert for a pending admin price (on `main` it still finalizes it itself until the D93 change merges, §4.4). A restart can repeat an alert that was already sent; it can't skip one.
 - **Per ticker-day.** It runs the schedule in §4.4 once per ticker and day, settles the `TickerDay` through the first strike, then calls `settle_market` for the remaining strikes (several per transaction).
 - "Already settled" is treated as success, with no alert.
 
@@ -455,7 +488,7 @@ interface AlertSink {
 }
 ```
 
-Two sinks ship: `console` (structured JSON logs) and `webhook` (JSON POST to `ALERT_WEBHOOK_URL`). `ALERT_SINKS` selects them (default `console`). Email, SMS or a chat tool can be added by implementing the interface. Each send is wrapped so a failing sink is logged and never crashes the worker. Alerts fire for morning job failures and stale previous closes, the +15 and +50 minute settlement alerts, `AdminPriceMismatch`, and invariant failures. Unit tests use a fake sink.
+Two sinks ship: `console` (structured JSON logs) and `webhook` (JSON POST to `ALERT_WEBHOOK_URL`). `ALERT_SINKS` selects them (default `console`). Email, SMS or a chat tool can be added by implementing the interface. Each send is wrapped so a failing sink is logged and never crashes the worker. Alerts fire for morning job failures and stale previous closes, the +15 and +50 minute settlement alerts, the +60 alert asking the admin to finalize a pending price (D93, in progress), `AdminPriceMismatch`, and invariant failures. Unit tests use a fake sink.
 
 ### 6.5 Demo mode
 
@@ -465,9 +498,14 @@ The lifecycle demo can't wait for a real 4:00 PM close. When `Config.demo_mode` 
 
 `assertNotMainnet` in `packages/sdk` throws when the cluster name or RPC URL points at mainnet-beta. Every deploy, bootstrap and demo script, and the worker at startup, calls it first. Scripts that send transactions also compare the RPC's genesis hash with mainnet-beta's and refuse on a match, which catches a custom RPC URL that doesn't say "mainnet".
 
-### 6.7 Health
+### 6.7 Health and the intraday price route
 
-The worker serves `GET /healthz` for the Railway health check. It reports the last successful scan and relay publish.
+The worker runs one small HTTP server on `PORT` (8080 locally; Railway sets it):
+
+- `GET /healthz` for the Railway health check. It reports the last successful scan and relay publish.
+- `GET /prices/intraday/<ticker>`, the Markets chart's data (R66). It is read-only, display-only and allows any origin (CORS `*`). The body is `{ ticker, live, sessionDate, openTs, endTs, earlyClose, points: [{ t, price }] }` for the window `chartSession(now)` picks, with points trimmed to it. An unlisted ticker answers 404 `unknown-ticker`; an upstream 429 answers 503 `rate-limited`; any other failure 503 `unavailable`.
+
+**Caching.** Each ticker's result, success or failure, is cached for 60 s (`INTRADAY_CACHE_SECS`), and the pending request itself is cached, so concurrent page loads share one upstream call. That bounds upstream traffic to one request per ticker per minute however many browsers are open, and a failing provider is never retried inside the window. The route has its own relay source instance, so a 429 backoff caused by chart traffic never delays the relay publisher. Settlement never reads it.
 
 ---
 
@@ -478,14 +516,25 @@ Next.js (App Router), TypeScript, Solana wallet adapter (Phantom and Solflare at
 | Page | Contents |
 | --- | --- |
 | Landing | What Meridian is, live prices, connect-wallet button |
-| Markets | Grid of the 7 tickers with live price and number of active contracts |
+| Markets | Grid of the 7 tickers. Each card shows the live price (or the last close while closed), the number of active contracts, an intraday chart and the market state (below). |
 | Trade | Strike list of contract cards (strike, Yes and No prices, implied probability); the order book in a Yes view and a No view; the Buy Yes / Sell Yes / Buy No / Sell No panel with Market or Limit; a countdown to `close_ts` shown in ET whatever the browser's time zone, honoring early closes; and the payoff line "You pay $X. You win $1.00 if [TICKER] closes above [STRIKE]." with a visible note that a close exactly at the strike pays Yes ("… closes below [STRIKE]." for No). Settled cards show the settlement price, its source (oracle or admin), the winning side, and $1.00 / $0.00 per token. |
 | Portfolio | Positions with entry price, current price and P&L; settled outcomes with price and source; Redeem; one "close out orders and redeem" action (cancel, `settle_funds`, redeem in one transaction where it fits); a market-maker view with net Yes and No per strike, fills and P&L |
 | History | The user's fills (as maker or taker), mints, merges and redemptions, decoded from program events |
+| Admin (in progress) | Admin only (R70, D93). Propose a settlement price for a ticker and day (from +15 min), finalize a pending price (from +60 min), pause and unpause. Not merged into `main` yet. |
 
 - **Two views of one book.** The No view is computed from the Yes book: No asks = `100 − Yes bids`, No bids = `100 − Yes asks`, same quantities, each sorted best-first. Executable quotes: Buy Yes = best Yes ask; Sell Yes = best Yes bid; Buy No = `100 − best Yes bid`; Sell No = `100 − best Yes ask`. The implied No price beside a Yes price is `100 −` that price. The mapping lives in `packages/sdk` and one fixture checks both views.
 - **Real-time book.** Websocket `accountSubscribe` on the open market's `OrderBook` and `Market` accounts, with polling as a fallback. Another wallet's new order shows within 2 seconds.
-- **Live prices from the oracle.** The app subscribes to the `LatestPrice` accounts in `meridian_oracle`, shows each price's publish time, and marks a price older than 5 minutes as stale. There is no off-chain price endpoint.
+- **Live prices from the oracle.** The app subscribes to the `LatestPrice` accounts in `meridian_oracle`, shows each price's publish time, and marks a price older than 5 minutes as stale while the market is open. Live prices never come from an off-chain endpoint; the only off-chain data the app reads is the chart series below.
+- **Markets chart (R66).** Each card fetches its series from the worker's intraday route (§6.7) at `NEXT_PUBLIC_PRICE_API_URL`; the browser never calls a market-data provider. The chart is a dependency-free SVG line with a dashed line at the session's open and an end dot. The x axis always spans the whole session (6.5 h, or 3.5 h on an early close), so a live line grows across the card during the day. A label reads "Live · today" or "Closed · <Mon> <D>" with the signed change since the open, so colour isn't the only signal, and the chart's accessible name carries the open, last or close, and change. The card re-reads the series every 60 s, open or closed (the worker's cache makes that cheap), so a closed card turns live at the open without a reload, and a failed refresh keeps the last good series. With no URL, no data or an error, the card shows "Chart unavailable" and everything else still works.
+- **Markets card states (R68, R69).** The card reads the shared clock (`services.now()`, re-evaluated at least every 60 s) and the calendar's `reopenLabel`, so it switches at 9:30 and at the close with no reload.
+
+  | State | Header | Price line | Status line under the chart |
+  | --- | --- | --- | --- |
+  | Open | Ticker; "Stale" badge if the price is over 5 minutes old | Latest on-chain price, or "—" | "As of <time>", or "Waiting for the first price" |
+  | Closed | Ticker on the left, a compact "Closed" pill on the right (`role="status"`, accessible name "Closed. Reopens …") | "Last close" and the price: the on-chain latest price if there is one, else the last point of the worker's closed-session series. "—" when neither exists. | "Reopens <day> 9:30 AM ET", always in ET |
+
+  The stale marker is never shown while closed, since a closed market's price is expected to be old. The pill doesn't shrink and the ticker may wrap, so the two never overlap, and nothing overflows down to the narrowest card (about 180 px). The card owns the intraday state and passes it to the chart, so the chart and "Last close" share one fetch.
+- **Admin vs regular user (R70, in progress).** The app treats the connected wallet as the admin when it equals `Config.admin`. Only the admin sees the Admin link. The Admin page enables each button only when the on-chain rule allows it and shows when it becomes available (ET); a non-admin who opens it directly sees "Admin only" with no controls. The program rejects non-admin calls regardless (R10). The admin CLI keeps working for the same actions. This page is being built and is not in `main` yet.
 - **Position constraint.** Buy Yes is disabled while the wallet holds No for that strike, and Buy No while it holds Yes, with the reason and the exit action (§3.5).
 - **History and P&L.** The program emits `OrderFilled`, `PairMinted`, `PairMerged`, `Redeemed` and `MarketSettled`. The app finds the user's own transactions (`getSignaturesForAddress` on the wallet and token accounts), which tells it which markets the user traded. Maker fills land in other people's transactions, so for those markets it also scans the `OrderBook`'s signatures and keeps fills whose `maker` or `taker` is the user. Average entry and realized P&L are computed client-side. A No bought through Buy No has entry `$1.00 − Yes sale price` (the mint and the sale are in the same transaction), and Sell No exits at `$1.00 − Yes buy price`. There is no database in the MVP.
 - **Signing and errors.** Each trade prompts exactly one signature. Clear messages for a rejected signature, insufficient USDC, a paused program, a closed market and a constraint block.
@@ -499,22 +548,31 @@ Next.js (App Router), TypeScript, Solana wallet adapter (Phantom and Solflare at
 ```
 programs/meridian/          Anchor program: markets, book, settlement
 programs/meridian_oracle/   Anchor program: signer registry, price updates, close records, latest prices
-packages/sdk/               TS client, tx builders, shared math (strikes, closing rule, No view), calendar, mainnet guard
-packages/price-providers/   PriceProvider, RelaySource (yahoo, mock), Pyth, Chainlink
-services/automation/        Worker: scheduler, jobs, relay publisher, alert sinks, health, admin CLI
-app/                        Next.js web app
-scripts/                    deploy, bootstrap, rent measurement, lifecycle demo
-fixtures/                   shared test fixtures (strikes, closing price, Yahoo responses, oracle payloads)
+packages/sdk/               TS client, tx builders, shared math (strikes, closing rule, No view), mainnet guard
+packages/price-providers/   PriceProvider interfaces, relay sources (alpaca, yahoo, mock), Pyth, Chainlink,
+                            recorded provider fixtures, fake Alpaca websocket server
+services/automation/        Worker: calendar, scheduler, jobs, relay publisher, alert sinks, health and
+                            intraday route, admin CLI
+app/                        Next.js web app (Playwright specs in app/e2e)
+scripts/                    deploy, bootstrap, rent measurement, lifecycle demo, e2e stack, test ports
+fixtures/                   shared strike and closing-price fixtures
 tests/                      Anchor integration tests
 ```
 
 - npm workspaces. Rust is pinned in `rust-toolchain.toml`; Anchor and the Solana CLI are pinned in `Anchor.toml`.
 - Quality gates: Prettier (no semicolons, single quotes), ESLint, `tsc --noEmit`, `cargo fmt --check`, `cargo clippy -D warnings` and every test suite, run by `make gates` from a Husky pre-push hook and by the merge request pipeline.
 - **One-command setup:**
-  - `make dev` starts a local validator, deploys both programs, bootstraps config and a mock USDC mint, creates sample markets, and starts the worker (with the `mock` source) and the web app.
+  - `make dev` starts a local validator on `LOCAL_VALIDATOR_RPC_PORT` (8913), deploys both programs, bootstraps config and a mock USDC mint, creates sample markets, and starts the worker and the web app. The worker uses `mock` unless Alpaca keys are set (§5.5).
   - `make test` runs all test suites.
+  - `make e2e` builds a private stack (validator, deploy, bootstrap, one demo market, the web app with a test wallet) and runs the Playwright specs, on its own ports (`E2E_*`, defaults RPC 8975, gossip 9350, web 3105).
   - `make deploy-devnet` deploys to devnet.
   - `make demo` runs the full lifecycle on devnet.
+
+**Validator ports.** Several workers and the CI runner share one Mac, and CI's test validator holds a fixed block (RPC 8899-8900, faucet 9900, gossip 9600, dynamic 9601-9650, pinned in `Anchor.toml` `[test.validator]`). So nothing local uses that block:
+
+- `scripts/anchor-test.sh` runs the Anchor tests for `make gates`, `make test` and the pre-push hook. Outside CI it probes for the first free block (RPC 8920-8961 with the WebSocket on RPC + 1 and the faucet on RPC + 2; gossip 9010-9254 plus 40 dynamic ports), or takes `VALIDATOR_RPC_PORT`, `VALIDATOR_FAUCET_PORT`, `VALIDATOR_GOSSIP_PORT` and `VALIDATOR_DYNAMIC_PORT_RANGE` from env. It refuses any block that overlaps CI's, swaps the ports into `Anchor.toml` for the run (Anchor has no env substitution) and restores the file on exit.
+- In CI it keeps the reserved block, after `scripts/check-validator-ports.sh` waits for it to be free (every 30 s, up to 15 minutes), naming the processes that hold it, instead of letting `anchor test` time out.
+- Gossip is always pinned, because Agave otherwise binds 8000 and two validators clash there. The blocks for `make dev`, `make e2e`, the Pyth slot test's own validator and the probe ranges don't overlap.
 
 ---
 
@@ -527,10 +585,10 @@ Work test-first, one requirement at a time, per the delivery loop.
 | Program unit tests | Rust `#[test]` | Payout rule (above, below, exactly at strike) for every closing-price shape; closing price rule (all three shapes; boundary timestamps ±300 and ±301 s; staleness against `close_ts`; rejection of wide-confidence, after-hours and wrong-ticker updates); strike math; order book matching, price-time priority, maker price, self-trade, capacity and fill cap |
 | Property and invariant tests | `proptest` (at least 10,000 cases) | INV-3 for arbitrary prices, exponents and strikes. Interpolated comparison matches an exact rational reference. Random sequences of mint, merge, order, cancel and redeem keep INV-1, INV-2 and INV-4. |
 | Program integration | Anchor tests on a local validator (TypeScript, Mocha) | Full lifecycle create → mint → trade → settle → redeem; all 4 trade paths from a fresh wallet with size and single-signature checks; multi-user maker/taker scenario with both redeeming; pause; `merge_pair` and `merge_pair_up_to` partial fills; vault after every mint and redeem; USDC donation and direct burn; `initialize_config` from a non-upgrade-authority signer; non-admin calls; canonical close record (every other account combination fails or gives the same outcome); one price per ticker across strikes and monotone outcomes; admin propose at +899/+900 and finalize at +3599/+3600; oracle beats pending admin price and emits `AdminPriceMismatch`; outcome immutability; redeem 365 days later; compute units at the fill cap; rent measurement |
-| Price providers | `node:test` with recorded HTTP fixtures | Yahoo parsing (official close, 1-minute bars, previous close and its date), timeouts, 429 and malformed responses; the `mock` source; Pyth and Chainlink adapters against recorded sample payloads |
-| Worker | `node:test` with fake timers, a fake chain client and a fake alert sink | Trading calendar (holidays, early close, DST, previous trading day), morning job timing, idempotency, retries and stale previous close; the full escalation schedule (about 30 polls in 15 minutes, no alert before +15, alerts at +15 and +50, finalize at +60), the polling stagger, slot 2 disabled; on-chain discovery, restart and late-added markets; settlement by `close_ts + 5 min` with the relay answering; failing alert sinks |
-| Web app | `node:test` + `@testing-library/react` + `user-event`; axe checks on forms | Wallet connect, trade panel intent → correct instructions, one signature per trade, error messages, position constraint prompts, both order book views from the same data, live prices and the stale marker, countdown in ET, payoff text, portfolio P&L and No cost basis, maker history, settled display and redeem flow |
-| End to end | Playwright with role/label locators; `@axe-core/playwright` on the Trade and Portfolio pages | Lifecycle against a local validator with a test wallet |
+| Price providers | `node:test` with recorded HTTP fixtures and a fake websocket server | Source selection from env and the Alpaca URL settings; Alpaca official close, interpolation pair, previous close, SIP-to-IEX fallback, 429 backoff, auth failure and network errors, and the stream (reconnect, backoff, snapshot fallback, after-hours trades dropped); Yahoo parsing, timeouts, 429 and malformed responses; the `mock` source for all 7 tickers and its intraday series; fixture provenance; Pyth and Chainlink adapters against recorded sample payloads |
+| Worker | `node:test` with fake timers, a fake chain client and a fake alert sink | Trading calendar (holidays, early close, DST, previous trading day), morning job timing, idempotency, retries and stale previous close; the full escalation schedule (about 30 polls in 15 minutes, no alert before +15, alerts at +15 and +50, finalize at +60), the polling stagger, slot 2 disabled; on-chain discovery, restart and late-added markets; settlement by `close_ts + 5 min` with the relay answering; failing alert sinks; `chartSession`, `nextOpen` and `reopenLabel` with an injected clock and `TZ=Asia/Tokyo` (mid-session, before the open, after the close, weekend, holiday, early close); the intraday route's windows, 60 s cache and error codes |
+| Web app | `node:test` + `@testing-library/react` + `user-event`; axe checks on forms | Wallet connect, trade panel intent → correct instructions, one signature per trade, error messages, position constraint prompts, both order book views from the same data, live prices and the stale marker, countdown in ET, payoff text, portfolio P&L and No cost basis, maker history, settled display and redeem flow; Markets chart from a fixture series, its label, change, empty state and 60 s refresh; Closed pill, reopen line and "Last close" while closed, unchanged behaviour while open |
+| End to end | Playwright with role/label locators; `@axe-core/playwright` on the Trade and Portfolio pages | Lifecycle against the `make e2e` stack with a test wallet; Markets card layout at 1280, 1024, 768 and 390 px in injected closed-market time (pill inside the card and clear of the ticker, no horizontal overflow, reopen line below the chart) |
 
 Workspace unit tests use `node:test`, as the scaffold does. R56 names `vitest-axe`; the form checks run the same `axe-core` rules through `node:test`, and if that proves awkward the web app can move its tests to Vitest without affecting other workspaces.
 
@@ -551,11 +609,13 @@ The strike and closing-price fixtures live in `fixtures/` and are read by both t
 | Service | Start command | Health check | Notes |
 | --- | --- | --- | --- |
 | `web` | `npm run start -w app` | `GET /` | Next.js production server. Public URL. |
-| `automation` | `npm run start -w services/automation` | `GET /healthz` | Always-on worker: scheduler, settlement, relay publisher |
+| `automation` | `npm run start -w services/automation` | `GET /healthz` | Always-on worker: scheduler, settlement, relay publisher, and the public intraday price route for the Markets charts |
 
 Build and start commands and health checks are defined in the repo as Railway config for each service. No database. The user enters all secrets in Railway. The first live deploy waits for the user's confirmation; until then both services are built and started locally to validate the config.
 
 ### Environment variables (`.env.example`)
+
+`.env.example` is the reference, with a comment on every variable. In summary:
 
 ```
 # Chain
@@ -564,53 +624,68 @@ SOLANA_RPC_URL=
 SOLANA_WS_URL=
 MERIDIAN_PROGRAM_ID=
 MERIDIAN_ORACLE_PROGRAM_ID=
+MERIDIAN_IDL_PATH=             # empty: target/idl, else the copy the worker ships
 USDC_MINT=
-UPGRADE_AUTHORITY_KEYPAIR=     # deploy and initialize_config only
+LOCAL_VALIDATOR_RPC_PORT=8913  # make dev; clear of 8899, 8900 and 9900
 ADMIN_KEYPAIR=
 AUTOMATION_KEYPAIR=
 RELAY_SIGNER_1_KEYPAIR=
 RELAY_SIGNER_2_KEYPAIR=        # only when slot 2 runs a second relay source
+ANCHOR_WALLET=                 # upgrade authority for deploy and initialize_config
 
 # Oracle slots: relay | pyth | chainlink | disabled
 ORACLE_SLOT_1=relay
 ORACLE_SLOT_2=disabled
-# Relay sources: alpaca | yahoo | mock (recorded fixtures, works offline). Empty: alpaca when both
-# Alpaca keys are set, otherwise mock
+# Relay sources: alpaca | yahoo | mock. Empty: alpaca when both Alpaca keys are set, otherwise mock
 RELAY_1_SOURCE=
-RELAY_2_SOURCE=                # set when a second relay source exists
+RELAY_2_SOURCE=
 
-# Alpaca market data (RELAY_<n>_SOURCE=alpaca)
+# Alpaca market data (§5.5)
 ALPACA_API_KEY=
 ALPACA_API_SECRET=
 ALPACA_API_ENDPOINT=           # trading API; never used for market data
-ALPACA_DATA_URL=               # empty means https://data.alpaca.markets
-ALPACA_STREAM_URL=             # empty means wss://stream.data.alpaca.markets/v2/iex
+ALPACA_DATA_URL=               # empty: https://data.alpaca.markets
+ALPACA_STREAM_URL=             # empty: wss://stream.data.alpaca.markets/v2/iex
 
 # Third-party oracles (only when a slot is switched to them)
 PYTH_RECEIVER_PROGRAM_ID=
 PYTH_FEED_IDS=                 # TICKER=<64 hex digits>, comma-separated
 PYTH_ACCESS_TOKEN=
-PYTH_HERMES_URL=               # default https://hermes.pyth.network
+PYTH_HERMES_URL=
 CHAINLINK_VERIFIER_PROGRAM_ID=
-CHAINLINK_STREAM_IDS=          # TICKER=<64 hex digits>, comma-separated
+CHAINLINK_STREAM_IDS=
 CHAINLINK_DATA_STREAMS_USERNAME=
 CHAINLINK_HMAC_SECRET=
-CHAINLINK_DATA_STREAMS_URL=    # default https://api.dataengine.chain.link
-CHAINLINK_ACCESS_CONTROLLER_ID= # default: the verifier's published access controller
+CHAINLINK_DATA_STREAMS_URL=
+CHAINLINK_ACCESS_CONTROLLER_ID=
 
 # Ops
-ALERT_SINKS=console            # comma-separated: console, webhook
 ALERT_WEBHOOK_URL=
+ALERT_SINKS=console            # comma-separated: console, webhook
 DEMO_MODE=false
+PORT=8080                      # worker health and intraday route; Railway sets it
 
 # Web
 NEXT_PUBLIC_SOLANA_RPC_URL=
+NEXT_PUBLIC_SOLANA_WS_URL=
 NEXT_PUBLIC_MERIDIAN_PROGRAM_ID=
 NEXT_PUBLIC_MERIDIAN_ORACLE_PROGRAM_ID=
 NEXT_PUBLIC_RELAY_SIGNER_1=    # public key whose LatestPrice accounts the app reads
+NEXT_PUBLIC_PRICE_API_URL=     # the worker's server, for the Markets charts; unset: "Chart unavailable"
+
+# make e2e (private stack ports and Playwright)
+E2E_BASE_URL=
+E2E_STACK_FILE=
+E2E_RPC_PORT=8975
+E2E_FAUCET_PORT=8977
+E2E_GOSSIP_PORT=9350
+E2E_DYNAMIC_PORT_RANGE=9351-9390
+E2E_WEB_PORT=3105
+E2E_SKIP_BUILD=
+NEXT_PUBLIC_E2E_TEST_WALLET=   # dev server only; production builds never offer it
 ```
 
-An earlier `.env` that spells it `CHAINLINK_DATA_STEAMS_USERNAME` must be renamed. The Yahoo source needs no key. `NEXT_PUBLIC_PRICE_API_URL` and `CHAINLINK_CANDLESTICK_API_KEY` are no longer used and should be removed from `.env.example` with the code that reads env vars.
+The Yahoo source needs no key. On Railway, the `automation` service needs a public domain for the chart route, and the `web` service's `NEXT_PUBLIC_PRICE_API_URL` points at it. The `VALIDATOR_*` overrides for `scripts/anchor-test.sh` (§8) are optional and not listed.
 
 ---
 
@@ -620,16 +695,20 @@ An earlier `.env` that spells it `CHAINLINK_DATA_STEAMS_USERNAME` must be rename
 | --- | --- | --- |
 | 1 | **Custom oracle acceptance.** The spec asks to integrate a price oracle available on the chain. A self-run relay may be judged as not meeting that. | Confirm with the project's technical contact. Meanwhile, the Pyth and Chainlink adapters are built and tested, switching is configuration only (§5.6), and the docs explain the cost and access reasons (§5.1). |
 | 2 | **Relay trust.** One source and one signer; a false close record would settle markets for good. | Public append-only records, write-once close records, narrow closing rule, separate keys, alerts and mismatch events (§5.1). A second source or a third-party oracle in slot 2 removes the single point. |
-| 3 | **Unofficial data API.** The Yahoo chart API is undocumented and can change or disappear without notice. | Recorded-response tests catch parsing breaks; malformed responses fail safe (no publish, escalation and admin fallback). `RelaySource` makes a replacement a single file. |
-| 4 | **Terms of use.** The Yahoo terms don't clearly allow republishing prices. | Acceptable for a devnet project with no real funds; documented in the README. Any use beyond devnet needs a licensed source. |
-| 5 | **Cloud-IP rate limits.** Yahoo may rate-limit or block Railway's IP ranges, which would stop live prices and the automatic close. | Low request rate, backoff on 429, stale marker in the UI, admin fallback at +15/+60. Check from the Railway host before the demo; run the worker locally or with the `mock` source in demo mode if blocked. |
+| 3 | **Free-plan feeds.** Alpaca's free real-time data is IEX only, one exchange's volume, and SIP is served only after about 15 minutes. With Alpaca the close normally settles at shape 3 from IEX 1-minute bars rather than the SIP official close (§5.5), and live and chart prices during the session are IEX. | The previous close and the official close use SIP only. IEX prices around 4:00 PM track the consolidated close closely for these seven stocks, and the confidence check bounds the spread. A paid SIP plan, or a longer official-close wait, makes shape 1 the normal case again. Documented in the README. |
+| 4 | **Terms of use.** Neither Alpaca's nor Yahoo's terms clearly allow republishing prices. | Acceptable for a devnet project with no real funds; documented in the README. Any use beyond devnet needs a licensed source. |
+| 5 | **Market-data outages and limits.** A bad key, a 429 or a dropped stream stops live prices; the unofficial Yahoo API may change shape or block cloud IP ranges. | Alpaca: bounded stream reconnects with a snapshot fallback, 429 backoff capped at 10 minutes, a clear startup error without keys. Yahoo is opt-in only. A source failure fails safe: no publish, the stale marker in the UI, escalation and the admin fallback. Recorded-response tests catch parsing breaks; `RelaySource` makes a replacement a single file. |
 | 6 | **Single price source in the MVP.** If source A is down at close, nothing settles automatically. | Accepted for the MVP. The admin fallback (+15 propose, +60 finalize) is the path. Slot 2 is a ready plug-in for a second relay source, Pyth or Chainlink. Tests cover the slot-2-disabled schedule. |
-| 7 | **Interpolation fallback is thin.** Yahoo's 1-minute regular-session bars may not include a price after the close, so shape 3 is often unavailable when shape 1 is. | Shape 1 is the normal case. Without it, the admin fallback applies. Documented as a limitation. |
+| 7 | **Interpolation fallback is thin.** A source may have no 1-minute bar starting at the close (IEX's 16:00 bar, Yahoo's regular-session bars), so shape 3 can be missing. | With Alpaca the relay publishes the SIP official close once it is served (about +16 min); with Yahoo shape 1 is the normal case. Otherwise the admin fallback applies. Documented as a limitation. |
 | 8 | **Order book capacity.** 32 orders per side and 32 seats per book can fill up on a busy strike. | Clear errors, seats released by `settle_funds`. Capacity is a constant; raise it if needed, at the rent cost in §3.8. |
 | 9 | **Devnet rent.** About 2 SOL per trading day, never reclaimed. Devnet faucets are rate-limited. | Measured by `scripts/measure-rent.ts` and documented. Run the morning job on devnet only when needed; the demo creates few markets. |
 | 10 | **Devnet RPC rate limits** affecting real-time updates, history scans and on-chain discovery | Allow a dedicated RPC URL via env, back off on 429s, use websocket subscriptions over polling |
 | 11 | **Devnet USDC faucet** needs manual wallet funding | Document it in the README. Local `make dev` uses a mock mint. |
 | 12 | **Early-close days** | `close_ts` per market handles them. Confirm the expected settlement window on those days (the spec only names 4:00 PM). |
+| 13 | **Manual finalize (D93).** With finalize admin-only, an oracle-failure day settles only when the admin acts after +60 min. | The worker alerts at +15, +50 and +60; the Admin page (in progress) and the CLI both finalize in one signature. This trades a manual step for key separation: the worker never holds the admin key (R43). |
+| 14 | **Chart data is off-chain.** The Markets chart comes from the worker's route, not the oracle, and the mock and demo series are synthetic. | Display only; settlement and live prices never read it. Cached per ticker for 60 s, so many browsers can't push the provider past one request per ticker per minute. The card degrades to "Chart unavailable". |
+| 15 | **App imports the worker's calendar.** The web app imports `reopenLabel` from `@meridian/automation`, so a Node-only import there would break the app build. | Only the `./calendar` subpaths are exported, and they import only the calendar data. Moving the calendar into `packages/sdk` stays a possible cleanup. |
+| 16 | **Shared build machine.** Workers and the CI runner share one Mac, so validators can collide on ports. | Private port blocks for local tests, `make dev` and `make e2e`; CI waits for its reserved block (§8). |
 
 ---
 
@@ -648,12 +727,12 @@ Every requirement and the components that satisfy it. Section references are to 
 | R7 | Token supply control [G] | Mint authority = market PDA, no freeze authority, INV-4 (§3.2, §3.6) |
 | R8 | No fees | INV-6, no sweep instruction (§3.6) |
 | R9 | Outcome immutability | INV-5, `Market.status`, `TickerDay.status` (§3.3, §3.6) |
-| R10 | Initialize config, upgrade authority only [G] | `initialize_config` program-data check, admin checks on every admin instruction (§3.3) |
+| R10 | Initialize config, upgrade authority only; admin-only instructions [G] | `initialize_config` program-data check, admin checks on every admin instruction including `finalize_admin_settle` (D93, in progress) (§3.3) |
 | R11 | Strike algorithm [G] | SDK strike math in integer cents, shared fixture (§6.1, §9) |
 | R12 | Create strike market, one per instruction [G] | `create_strike_market`, morning job (§3.3, §6.1) |
 | R13 | Add strike, no adjusting [G] | `add_strike`, no strike-changing instruction (§3.3) |
-| R14 | Trading calendar [G] | Calendar module and data in `packages/sdk` (§6) |
-| R15 | Morning job, stale previous close [G] | Morning job, Yahoo previous close with date, `AlertSink` (§5.5, §6.1) |
+| R14 | Trading calendar [G] | Calendar module and data in `services/automation/src/calendar` (§6) |
+| R15 | Morning job, stale previous close [G] | Morning job, relay source previous close with its date, `AlertSink` (§5.5, §6.1) |
 | R16 | Order placement and matching | `place_order`, `OpenOrders` seats, `settle_funds` (§3.3, §3.7) |
 | R17 | Execution at maker price [G] | Matching engine (§3.7) |
 | R18 | Cancel | `cancel_order` (§3.3) |
@@ -674,8 +753,8 @@ Every requirement and the components that satisfy it. Section references are to 
 | R33 | Closing price rule | Three shapes, `i128` comparison, shared fixture (§4.2) |
 | R34 | Staleness and confidence, against `close_ts` [G] | `max_staleness_secs`, `max_conf_bps`, staleness rule (§4.2) |
 | R35 | Settle market | `settle_market`, `MarketSettled` (§3.3) |
-| R36 | Admin fallback with delay, price not outcome [G] | `propose_admin_price` (+900), `finalize_admin_settle` (+3600), `TickerDay` pending fields, `AdminPriceMismatch` (§3.3, §4.4) |
-| R37 | Settlement escalation, markets found on-chain [G] | Settlement job, escalation schedule, on-chain discovery, phase from the clock (§4.4, §6.2) |
+| R36 | Admin fallback with delay, price not outcome, admin-only finalize [G] | `propose_admin_price` (+900), admin-only `finalize_admin_settle` (+3600, D93 in progress), `TickerDay` pending fields, `AdminPriceMismatch` (§3.3, §4.4) |
+| R37 | Settlement escalation, markets found on-chain [G] | Settlement job, escalation schedule with the +60 finalize alert (D93, in progress), on-chain discovery, phase from the clock (§4.4, §6.2, §6.4) |
 | R38 | Settlement by `close_ts + 5 min` [G] | Relay 3-minute wait, 30 s polling, latency test, demo log (§4.4) |
 | R39 | Free market-data relay source [G] | `alpaca`, `yahoo` and `mock` `RelaySource`s, `RELAY_1_SOURCE` (§5.5) |
 | R40 | Relay publisher | Relay publisher, confidence rule, logging (§5.4) |
@@ -702,8 +781,13 @@ Every requirement and the components that satisfy it. Section references are to 
 | R61 | Lifecycle demo | `make demo`, demo mode (§6.5, §8) |
 | R62 | `.env.example` | §10 |
 | R63 | README and technical docs [G] | README fed from §5.1, §5.6, §3.6, §11; no regulatory claims |
-| R64 | No company or program names [G] | Repo-wide rule in `AGENTS.md` |
+| R64 | No company or program names [G] | Repo-wide rule in `AGENTS.md`; commit email domains are acceptable (D93) |
 | R65 | Railway config | `web` and `automation` services, health checks (§10) |
+| R66 | Price chart on Markets cards [G] | `chartSession`, the worker's cached `/prices/intraday/<ticker>` route, `IntradayPriceProvider` on each source, the card's SVG chart, label and 60 s refresh (§5.5, §6, §6.7, §7) |
+| R67 | Alpaca market-data source | `alpaca` relay source: stream with reconnect and snapshot fallback, REST bars with the SIP/IEX feed rule, env config and key-based default, fake websocket tests (§5.3, §5.5) |
+| R68 | Closed tag with reopen time | `nextOpen` and `reopenLabel` on the shared calendar, the card's Closed status, stale marker only while open (§6, §7) |
+| R69 | Markets card layout and last close | "Closed" pill in the header, reopen line under the chart, "Last close" from the chain or the worker's session close, Playwright layout spec (§7, §9) |
+| R70 | Admin vs regular user in the web app | Admin page and link for the `Config.admin` wallet only, timed buttons, "Admin only" for others, admin CLI unchanged (§7; in progress) |
 
 ---
 
@@ -731,7 +815,9 @@ How each gotcha in the requirements is handled.
 | Buy No executes against the Yes bid, not the ask | R29 | Executable quotes come from the SDK mapping (§7) |
 | Permissionless settle with caller-chosen oracle accounts | R31 | One canonical `CloseRecord` PDA per slot, ticker and day; seed and owner checks; slot-2 rule; third-party slots permissioned (§4.1, §4.3) |
 | PRD says 4:05 PM; spec says 10 minutes | R38 | The stricter target: `close_ts + 5 min` with the relay answering |
-| Free data source: official close vs after-hours | R39 | `regularMarketPrice` only when `regularMarketTime ≥ close_ts` and the regular session has ended; pre/post-market data excluded (§5.5) |
+| Free data source: official close vs after-hours | R39, R67 | Alpaca: the SIP daily bar, never the 16:00 minute bar (which includes after-hours trades); stream trades outside the session dropped. Yahoo: `regularMarketPrice` only when `regularMarketTime ≥ close_ts` and the regular session has ended. Pre/post-market data excluded (§5.5) |
+| Free plan refuses recent SIP data | R67 | Feed chosen by window age (16 minutes), IEX fallback on the SIP 403, except for the previous and official close (§5.5) |
+| Chart picks the right session (open vs last full session, holidays, early close) | R66 | `chartSession(now)` on the NYSE calendar, tested with `TZ` set ahead of ET (§6) |
 | Never touch mainnet | R45 | `assertNotMainnet` on cluster and URL, plus a genesis-hash check (§6.6) |
 | Countdown in ET and early close | R51 | Countdown formats in America/New_York from `close_ts` |
 | Cost basis of No bought through mint-and-sell | R52 | Entry `$1.00 − Yes sale price`; Sell No exit `$1.00 − Yes buy price` (§7) |
@@ -747,4 +833,5 @@ How each gotcha in the requirements is handled.
 | Devnet rent for about 49 markets a day | R19 | About 0.04 SOL per market, measured and documented; capacity chosen for it (§3.8) |
 | Sub-second finality means `confirmed`, not `finalized` | R55 | The UI confirms at `confirmed`; the README explains |
 | No regulatory claims; justify every dependency | R63 | The README and this document make no regulatory or compliance claims; the README justifies each dependency |
-| No company names anywhere | R64 | Repo rule in `AGENTS.md`; checked before every commit |
+| Reopen day in ET whatever the browser's time zone | R68 | `reopenLabel` works in New York calendar days; tests run with `TZ=Asia/Tokyo` (§6) |
+| No company names anywhere | R64 | Repo rule in `AGENTS.md`; checked before every commit. Commit email domains are acceptable (D93). |
