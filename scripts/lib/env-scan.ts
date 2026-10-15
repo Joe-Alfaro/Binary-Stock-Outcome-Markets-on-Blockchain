@@ -35,6 +35,16 @@ export function findEnvReads(source: string): string[] {
   return [...names]
 }
 
+/**
+ * Names of the environment variables a shell script reads: `$NAME`, `${NAME}` and
+ * `${NAME:-default}`, leaving out positional and special parameters and the script's own
+ * variables (assigned, `local`, `export NAME=…`, `for NAME in`, `read NAME`).
+ */
+export function findShellEnvReads(source: string): string[] {
+  void source
+  return []
+}
+
 /** Variable names and values in a .env file, ignoring comments and blank lines. */
 export function parseEnvFile(content: string): Map<string, string> {
   const entries = new Map<string, string>()

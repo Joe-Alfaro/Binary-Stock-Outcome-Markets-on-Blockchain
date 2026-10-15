@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { findEnvReads, looksSecret, parseEnvFile } from './env-scan.js'
+import { findEnvReads, findShellEnvReads, looksSecret, parseEnvFile } from './env-scan.js'
 import { REPO_ROOT } from './test-support.js'
 
 /**
@@ -13,15 +13,23 @@ import { REPO_ROOT } from './test-support.js'
 const PLATFORM_VARS = new Set(['NODE_ENV', 'CI', 'HOME', 'PATH'])
 
 const SOURCE_FILE = /\.(ts|tsx|js|mjs|cjs)$/
+/** Shell scripts, including the extensionless Husky hooks. */
+const SHELL_FILE = /(\.sh$|^\.husky\/[^_/][^/]*$)/
 const SKIPPED = /(\.test\.tsx?$|test-support\.ts$|(^|\/)fixtures\/)/
 
-function trackedSourceFiles() {
+function trackedFiles() {
   return execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
-  })
-    .split('\n')
-    .filter((path) => SOURCE_FILE.test(path) && !SKIPPED.test(path))
+  }).split('\n')
+}
+
+function trackedSourceFiles() {
+  return trackedFiles().filter((path) => SOURCE_FILE.test(path) && !SKIPPED.test(path))
+}
+
+function trackedShellScripts() {
+  return trackedFiles().filter((path) => SHELL_FILE.test(path) && !SKIPPED.test(path))
 }
 
 describe('findEnvReads (R62)', () => {
@@ -67,6 +75,54 @@ describe('findEnvReads (R62)', () => {
 
   it('ignores lowercase properties and unrelated objects', () => {
     assert.deepEqual(findEnvReads('const x = env.cluster; const y = config.SOLANA_CLUSTER'), [])
+  })
+})
+
+describe('findShellEnvReads (R62)', () => {
+  it('finds $NAME, ${NAME} and ${NAME:-default} reads', () => {
+    const source = `
+      echo "$SOLANA_CLUSTER"
+      url=\${SOLANA_RPC_URL}
+      rpc=\${VALIDATOR_RPC_PORT:-$(free_block RPC 8920 8961 3)}
+      poll=\${VALIDATOR_PORT_POLL_SECONDS:-30}
+      if [ -n "\${CI:-}" ]; then echo ci; fi
+    `
+    assert.deepEqual(findShellEnvReads(source).sort(), [
+      'CI',
+      'SOLANA_CLUSTER',
+      'SOLANA_RPC_URL',
+      'VALIDATOR_PORT_POLL_SECONDS',
+      'VALIDATOR_RPC_PORT',
+    ])
+  })
+
+  it("finds a read nested in another read's default", () => {
+    const source = 'faucet=${VALIDATOR_FAUCET_PORT:-${E2E_FAUCET_PORT:-8977}}'
+    assert.deepEqual(findShellEnvReads(source).sort(), ['E2E_FAUCET_PORT', 'VALIDATOR_FAUCET_PORT'])
+  })
+
+  it("ignores the script's own variables", () => {
+    const source = `
+      LIMIT_BYTES=$((1024 * 1024))
+      echo "$LIMIT_BYTES"
+      export BUILD_DIR=target
+      echo "\${BUILD_DIR}"
+      local WHAT=$1
+      echo "$WHAT"
+      for TICKER in AAPL MSFT; do echo "$TICKER"; done
+      read -r ANSWER
+      echo "\${ANSWER:-no}"
+    `
+    assert.deepEqual(findShellEnvReads(source), [])
+  })
+
+  it('ignores positional and special parameters and lowercase variables', () => {
+    const source = `
+      echo "$1 \${2} $@ $* $# $? $$ $! $0 \${10}"
+      awk '{ print $1 " pid " $2 }'
+      echo "\${range%-*} $rpc \${faucet:-1}"
+    `
+    assert.deepEqual(findShellEnvReads(source), [])
   })
 })
 
@@ -124,6 +180,46 @@ describe('.env.example (R62)', () => {
         .map((name) => `${name} (${path})`),
     )
     assert.deepEqual(missing, [])
+  })
+
+  it('lists every environment variable the shell scripts read', () => {
+    const example = readExample()
+    const scripts = trackedShellScripts()
+    assert.ok(scripts.includes('scripts/anchor-test.sh'), 'the scan covers scripts/anchor-test.sh')
+    const missing = scripts.flatMap((path) =>
+      findShellEnvReads(readFileSync(join(REPO_ROOT, path), 'utf8'))
+        .filter((name) => !PLATFORM_VARS.has(name) && !example.has(name))
+        .map((name) => `${name} (${path})`),
+    )
+    assert.deepEqual(missing, [])
+  })
+
+  it('lists the VALIDATOR_* ports and waits the Anchor test scripts read', () => {
+    const reads = [
+      ...findShellEnvReads(readFileSync(join(REPO_ROOT, 'scripts/anchor-test.sh'), 'utf8')),
+      ...findShellEnvReads(
+        readFileSync(join(REPO_ROOT, 'scripts/check-validator-ports.sh'), 'utf8'),
+      ),
+    ]
+    const expected = [
+      'VALIDATOR_DYNAMIC_PORT_RANGE',
+      'VALIDATOR_FAUCET_PORT',
+      'VALIDATOR_GOSSIP_PORT',
+      'VALIDATOR_PORT_POLL_SECONDS',
+      'VALIDATOR_PORT_WAIT_SECONDS',
+      'VALIDATOR_RPC_PORT',
+    ]
+    assert.deepEqual(
+      expected.filter((name) => !reads.includes(name)),
+      [],
+      'the scan finds each read in the scripts',
+    )
+    const example = readExample()
+    assert.deepEqual(
+      expected.filter((name) => !example.has(name)),
+      [],
+      '.env.example lists each one',
+    )
   })
 
   it('lists PORT, which the worker health server reads', () => {
