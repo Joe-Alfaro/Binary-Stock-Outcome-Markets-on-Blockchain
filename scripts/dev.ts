@@ -29,10 +29,24 @@ export interface DevPlan {
   steps: DevStep[]
 }
 
+/** What `make dev ARGS='...'` can choose. */
+export interface DevArgs {
+  dryRun: boolean
+  /** `--source <name>`: the worker's relay source; wins over `RELAY_1_SOURCE`. */
+  source?: string
+}
+
+export interface DevPlanOptions {
+  /** The worker's relay source; falls back to `RELAY_1_SOURCE`, then `mock`. */
+  source?: string
+}
+
 export interface DevOptions {
   env: NodeJS.ProcessEnv
   runner: CommandRunner
   dryRun?: boolean
+  /** The worker's relay source, as `DevPlanOptions.source`. */
+  source?: string
   /** Resolves once the validator answers on the RPC URL. Skipped when not given. */
   waitForRpc?: (rpcUrl: string) => Promise<void>
   log?: (line: string) => void
@@ -79,7 +93,8 @@ function validatorPorts(env: NodeJS.ProcessEnv) {
 }
 
 /** The ordered steps of `make dev` on a local validator outside the default port block. */
-export function planDev(env: NodeJS.ProcessEnv): DevPlan {
+export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): DevPlan {
+  void options
   const { rpcPort, faucetPort, gossipPort, dynamicPortRange } = validatorPorts(env)
   const rpcUrl = `http://127.0.0.1:${rpcPort}`
   const local = { SOLANA_CLUSTER: 'localnet', SOLANA_RPC_URL: rpcUrl }
@@ -138,6 +153,12 @@ export function planDev(env: NodeJS.ProcessEnv): DevPlan {
       },
     ],
   }
+}
+
+/** Reads `--dry-run` and `--source <name>` from the command line. */
+export function parseDevArgs(argv: readonly string[]): DevArgs {
+  void argv
+  throw new Error('parseDevArgs is not implemented')
 }
 
 function describeStep(step: DevStep) {

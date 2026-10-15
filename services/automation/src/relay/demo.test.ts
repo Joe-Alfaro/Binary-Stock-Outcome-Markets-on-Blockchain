@@ -2,14 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { createMockSource, createRelaySource } from '@meridian/price-providers'
 import { createRelayPublisher } from './index.js'
-import {
-  captureLog,
-  createFakeClock,
-  createFakeOracle,
-  createScriptedSource,
-  edt,
-  findValueLog,
-} from './test-support.js'
+import { captureLog, createFakeClock, createFakeOracle, edt, findValueLog } from './test-support.js'
 
 const DAY = '2026-10-12'
 /** A demo market closing at 2:07 PM, not at a real close. */
@@ -70,21 +63,5 @@ describe('R44 demo relay', () => {
     const entries = log.entries()
     assert.ok(entries.length > 0)
     entries.forEach((entry) => assert.notEqual(entry.replayed, true))
-  })
-
-  it('refuses demo mode with a live source', () => {
-    const clock = createFakeClock(DEMO_CLOSE)
-    assert.throws(
-      () =>
-        createRelayPublisher({
-          oracle: createFakeOracle(clock),
-          source: createScriptedSource(clock, () => null, 'yahoo'),
-          tickers: ['AAPL'],
-          clock,
-          log: () => undefined,
-          demo: true,
-        }),
-      /mock/,
-    )
   })
 })

@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { planDev, runDev, type DevStep, type DevStepId } from './dev.js'
+import { parseDevArgs, planDev, runDev, type DevStep, type DevStepId } from './dev.js'
 import type { CommandRunner } from './deploy-devnet.js'
 import { base58Secret } from './lib/test-support.js'
 import { ensureProgramKeypairs } from './program-keys.js'
@@ -233,5 +233,144 @@ describe('runDev web step configuration (R60)', () => {
   it('keeps the local RPC URL for the web app', async () => {
     const { web } = await webRun()
     assert.equal(web.env.NEXT_PUBLIC_SOLANA_RPC_URL, planDev({}).rpcUrl)
+  })
+})
+
+/** Test credentials; real ones never appear in tests. */
+const ALPACA_KEYS = {
+  ALPACA_API_KEY: 'test-key-id-PK0000',
+  ALPACA_API_SECRET: 'test-secret-0000000000',
+}
+
+function assertNoAlpacaKeys(lines: string[]) {
+  lines.forEach((line) =>
+    Object.entries(ALPACA_KEYS).forEach(([name, value]) =>
+      assert.ok(!line.includes(value), `printed ${name}: ${line}`),
+    ),
+  )
+}
+
+// R60, R67, D94: make dev runs the worker on a chosen relay source, so a developer can see real
+// prices locally. Mock stays the default; alpaca needs its keys and they are never printed.
+describe('make dev relay source (R60, R67, D94)', () => {
+  it("reads --source and --dry-run from make dev's ARGS", () => {
+    assert.deepEqual(parseDevArgs(['--source', 'alpaca']), { dryRun: false, source: 'alpaca' })
+    assert.deepEqual(parseDevArgs(['--dry-run', '--source', 'mock']), {
+      dryRun: true,
+      source: 'mock',
+    })
+    assert.deepEqual(parseDevArgs([]), { dryRun: false })
+  })
+
+  it('refuses --source without a name', () => {
+    assert.throws(() => parseDevArgs(['--source']), /--source/)
+  })
+
+  it('keeps the mock source by default, with or without the Alpaca keys', () => {
+    assert.equal(step(planDev({}).steps, 'worker').env?.RELAY_1_SOURCE, 'mock')
+    assert.equal(step(planDev({ ...ALPACA_KEYS }).steps, 'worker').env?.RELAY_1_SOURCE, 'mock')
+  })
+
+  it('starts the worker on alpaca, still in demo mode, when --source alpaca is given', () => {
+    const worker = step(planDev({ ...ALPACA_KEYS }, { source: 'alpaca' }).steps, 'worker')
+    assert.equal(worker.env?.RELAY_1_SOURCE, 'alpaca')
+    assert.equal(worker.env?.DEMO_MODE, 'true')
+  })
+
+  it('starts the worker on alpaca when RELAY_1_SOURCE=alpaca is set', () => {
+    const worker = step(planDev({ ...ALPACA_KEYS, RELAY_1_SOURCE: 'alpaca' }).steps, 'worker')
+    assert.equal(worker.env?.RELAY_1_SOURCE, 'alpaca')
+  })
+
+  it('lets --source win over RELAY_1_SOURCE', () => {
+    const worker = step(
+      planDev({ ...ALPACA_KEYS, RELAY_1_SOURCE: 'alpaca' }, { source: 'mock' }).steps,
+      'worker',
+    )
+    assert.equal(worker.env?.RELAY_1_SOURCE, 'mock')
+  })
+
+  it('refuses an unknown source, naming the valid ones', () => {
+    assert.throws(() => planDev({}, { source: 'bogus' }), /bogus.*mock.*alpaca|bogus.*alpaca.*mock/)
+  })
+
+  it('refuses alpaca without its keys, naming both missing variables, before running anything', async () => {
+    const { runner, commands } = recordingRunner()
+    await assert.rejects(
+      runDev({ env: {}, runner, source: 'alpaca', dryRun: true, log: () => {} }),
+      (error: Error) =>
+        /ALPACA_API_KEY/.test(error.message) && /ALPACA_API_SECRET/.test(error.message),
+    )
+    await assert.rejects(
+      runDev({ env: { RELAY_1_SOURCE: 'alpaca' }, runner, log: () => {} }),
+      /ALPACA_API_KEY/,
+    )
+    assert.deepEqual(commands, [])
+  })
+
+  it('names only the missing key when one of the two is set', () => {
+    assert.throws(
+      () => planDev({ ALPACA_API_KEY: ALPACA_KEYS.ALPACA_API_KEY }, { source: 'alpaca' }),
+      (error: Error) =>
+        /ALPACA_API_SECRET/.test(error.message) &&
+        !/ALPACA_API_KEY\b/.test(error.message) &&
+        !error.message.includes(ALPACA_KEYS.ALPACA_API_KEY),
+    )
+  })
+
+  it('prints RELAY_1_SOURCE=alpaca in the dry run but never the keys', async () => {
+    const { runner, commands } = recordingRunner()
+    const lines: string[] = []
+    await runDev({
+      env: { ...ALPACA_KEYS },
+      runner,
+      source: 'alpaca',
+      dryRun: true,
+      log: (line) => lines.push(line),
+    })
+    assert.deepEqual(commands, [])
+    const worker = lines.find((line) => line.startsWith('[worker]'))
+    assert.ok(worker, `no worker line in ${lines.join('\n')}`)
+    assert.match(worker, /RELAY_1_SOURCE=alpaca/)
+    assertNoAlpacaKeys(lines)
+  })
+
+  it('hands the worker RELAY_1_SOURCE=alpaca and the keys from env, without printing them', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'meridian-dev-'))
+    const dirs = { keysDir: join(root, 'keys'), deployDir: join(root, 'deploy') }
+    ensureProgramKeypairs(dirs)
+    const { runner, runs } = envRecordingRunner()
+    const lines: string[] = []
+    await runDev({
+      env: { ...ALPACA_KEYS, RELAY_1_SOURCE: 'alpaca' },
+      runner,
+      programKeyDirs: dirs,
+      log: (line) => lines.push(line),
+    })
+    const worker = runs.find((run) => run.args.join(' ') === 'run start -w services/automation')
+    assert.ok(worker, 'worker step never ran')
+    assert.equal(worker.env.RELAY_1_SOURCE, 'alpaca')
+    assert.equal(worker.env.DEMO_MODE, 'true')
+    assert.equal(worker.env.ALPACA_API_KEY, ALPACA_KEYS.ALPACA_API_KEY)
+    assert.equal(worker.env.ALPACA_API_SECRET, ALPACA_KEYS.ALPACA_API_SECRET)
+    assertNoAlpacaKeys(lines)
+    // Only the worker needs the keys.
+    runs
+      .filter((run) => run !== worker)
+      .forEach((run) =>
+        Object.values(ALPACA_KEYS).forEach((value) =>
+          assert.ok(
+            !Object.values(run.env).includes(value),
+            `${run.command} ${run.args.join(' ')} got an Alpaca key`,
+          ),
+        ),
+      )
+  })
+
+  // The Markets charts read the worker's /prices/intraday route; without its URL every card shows
+  // "Chart unavailable", whichever source the worker runs.
+  it("points the web app's charts at the local worker's price route", () => {
+    const web = step(planDev({}).steps, 'web')
+    assert.equal(web.env?.NEXT_PUBLIC_PRICE_API_URL, 'http://127.0.0.1:8080')
   })
 })
