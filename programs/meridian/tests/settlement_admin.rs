@@ -135,8 +135,50 @@ fn r36_propose_fails_once_the_ticker_day_is_final() {
 
 // ---- finalize_admin_settle ------------------------------------------------------------------
 
+/// The automation key and a stranger: every signer other than the admin.
+fn non_admins(env: &mut Env) -> [Keypair; 2] {
+    let stranger = Keypair::new();
+    env.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
+    [env.automation.insecure_clone(), stranger]
+}
+
 #[test]
-fn r36_finalize_fails_at_close_plus_3599_and_succeeds_at_3600() {
+fn r10_r36_finalize_from_a_non_admin_fails_at_any_time() {
+    let (mut env, m) = setup();
+    assert_ok(env.propose(69_100));
+    let signers = non_admins(&mut env);
+    for offset in [900, 3599, 3600, 3601, 7200, 86_400] {
+        env.set_time(T_CLOSE + offset);
+        for signer in &signers {
+            assert_meridian_err(env.finalize_as(signer), MeridianError::Unauthorized);
+        }
+    }
+    let day = env.ticker_day(&m);
+    assert_eq!(day.status, TickerDayStatus::Open);
+    assert_eq!(day.settle_source, SettleSource::None);
+    assert_eq!(
+        day.pending_admin_price, 69_100,
+        "the pending price is untouched"
+    );
+
+    // The admin can still finalize afterwards.
+    assert_ok(env.finalize());
+    assert_eq!(env.ticker_day(&m).status, TickerDayStatus::Final);
+}
+
+#[test]
+fn r10_r36_finalize_from_a_non_admin_without_a_pending_price_is_unauthorized() {
+    let (mut env, m) = setup();
+    env.set_time(FINALIZE_AT);
+    let signers = non_admins(&mut env);
+    for signer in &signers {
+        assert_meridian_err(env.finalize_as(signer), MeridianError::Unauthorized);
+    }
+    assert_eq!(env.ticker_day(&m).status, TickerDayStatus::Open);
+}
+
+#[test]
+fn r36_admin_finalize_fails_at_close_plus_3599_and_succeeds_at_3600() {
     let (mut env, m) = setup();
     assert_ok(env.propose(69_100));
     env.set_time(T_CLOSE + 3599);

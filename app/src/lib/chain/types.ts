@@ -43,6 +43,50 @@ export interface ContractSummary {
   settlement: Settlement | null
 }
 
+/** What the Admin page reads from the program's `Config` (R70). */
+export interface AdminConfig {
+  /** `Config.admin`: the only wallet the Admin page serves. */
+  admin: string
+  paused: boolean
+  /** `admin_propose_delay_secs`: proposals open at `close_ts +` this (900). */
+  proposeDelaySecs: number
+  /** `admin_finalize_delay_secs`: finalization opens at `close_ts +` this (3600). */
+  finalizeDelaySecs: number
+}
+
+export type TickerDayStatus = 'Open' | 'Final'
+
+/** One ticker and trading day: the unit an admin price applies to (R31, R36). */
+export interface TickerDaySummary {
+  ticker: Ticker
+  /** `YYYY-MM-DD`. */
+  tradingDay: string
+  /** Unix seconds. */
+  closeTs: number
+  status: TickerDayStatus
+  /** The pending admin price in dollars, or `null` when none is pending. */
+  pendingAdminPrice: number | null
+}
+
+export interface ProposeAdminPriceRequest {
+  admin: string
+  ticker: Ticker
+  tradingDay: string
+  /** Whole cents, the program's admin price scale. */
+  priceCents: number
+}
+
+export interface FinalizeAdminSettleRequest {
+  admin: string
+  ticker: Ticker
+  tradingDay: string
+}
+
+export interface SetPausedRequest {
+  admin: string
+  paused: boolean
+}
+
 export type TradePath = Exclude<TradeAction, 'Cancel' | 'CloseOut'>
 export type OrderType = 'Market' | 'Limit'
 
@@ -137,6 +181,16 @@ export interface ChainClient {
    */
   buildCloseOutPosition(request: MarketOwner): Promise<UnsignedTx[]>
   sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation>
+  /** The admin key, pause flag and admin settlement delays from `Config` (R70). */
+  getAdminConfig(): Promise<AdminConfig>
+  /** Ticker-days that still have unsettled markets, with any pending admin price (R70). */
+  listTickerDays(): Promise<TickerDaySummary[]>
+  /** One `propose_admin_price` transaction, signed by the admin (R36). */
+  buildProposeAdminPrice(request: ProposeAdminPriceRequest): Promise<UnsignedTx>
+  /** One `finalize_admin_settle` transaction, signed by the admin (R36, D93). */
+  buildFinalizeAdminSettle(request: FinalizeAdminSettleRequest): Promise<UnsignedTx>
+  /** One `pause` or `unpause` transaction, signed by the admin (R41). */
+  buildSetPaused(request: SetPausedRequest): Promise<UnsignedTx>
 }
 
 export interface WalletOption {

@@ -109,6 +109,16 @@ export class FakeChainClient implements ChainClient {
     }
   }
 
+  /**
+   * The admin finalizes the pending price outside the worker (the web app or admin CLI, D93).
+   * Settles nothing by itself: each market still needs `settle_market`.
+   */
+  finalizeByAdmin(ticker: string, tradingDay: string): void {
+    const tickerDay = this.#tickerDay(ticker, tradingDay)
+    if (!tickerDay.pending) throw new Error('NoPendingAdminPrice')
+    tickerDay.final = { price: tickerDay.pending.price, source: 'admin' }
+  }
+
   /** Someone else settles every strike of a ticker and day from slot 1. */
   settleExternally(ticker: string, tradingDay: string, price: ChainPrice): void {
     this.publishClose(1, ticker, tradingDay, price)

@@ -1,15 +1,20 @@
 import type { Holdings, ProgramEvent, YesBook } from '@meridian/sdk'
 import type {
+  AdminConfig,
   CancelOrderRequest,
   ChainClient,
   Commitment,
   Confirmation,
   ContractSummary,
+  FinalizeAdminSettleRequest,
   LatestPrice,
   MarketOwner,
   OpenOrder,
+  ProposeAdminPriceRequest,
+  SetPausedRequest,
   SignedTx,
   Ticker,
+  TickerDaySummary,
   TradeIntent,
   Unsubscribe,
   UnsignedTx,
@@ -38,6 +43,14 @@ export class FakeChain implements ChainClient {
   openOrders = new Map<string, OpenOrder[]>()
   /** How many transactions close-out-position builds. */
   closeOutPositionTransactions = 1
+  /** `Config` as the Admin page reads it (R70). The connected test wallet is the admin. */
+  adminConfig: AdminConfig = {
+    admin: WALLET,
+    paused: false,
+    proposeDelaySecs: 900,
+    finalizeDelaySecs: 3600,
+  }
+  tickerDays: TickerDaySummary[] = []
 
   readonly calls = {
     getBook: [] as string[],
@@ -48,6 +61,9 @@ export class FakeChain implements ChainClient {
     buildCloseOutPosition: [] as MarketOwner[],
     sendAndConfirm: [] as { tx: SignedTx; commitment: Commitment }[],
     getUsdcBalance: [] as string[],
+    buildProposeAdminPrice: [] as ProposeAdminPriceRequest[],
+    buildFinalizeAdminSettle: [] as FinalizeAdminSettleRequest[],
+    buildSetPaused: [] as SetPausedRequest[],
   }
 
   private priceListeners = new Set<(price: LatestPrice) => void>()
@@ -137,6 +153,29 @@ export class FakeChain implements ChainClient {
     }))
   }
 
+  async getAdminConfig() {
+    return { ...this.adminConfig }
+  }
+
+  async listTickerDays() {
+    return this.tickerDays.map((day) => ({ ...day }))
+  }
+
+  async buildProposeAdminPrice(request: ProposeAdminPriceRequest): Promise<UnsignedTx> {
+    this.calls.buildProposeAdminPrice.push(request)
+    return { raw: { kind: 'propose-admin-price', request } }
+  }
+
+  async buildFinalizeAdminSettle(request: FinalizeAdminSettleRequest): Promise<UnsignedTx> {
+    this.calls.buildFinalizeAdminSettle.push(request)
+    return { raw: { kind: 'finalize-admin-settle', request } }
+  }
+
+  async buildSetPaused(request: SetPausedRequest): Promise<UnsignedTx> {
+    this.calls.buildSetPaused.push(request)
+    return { raw: { kind: 'set-paused', request } }
+  }
+
   async sendAndConfirm(tx: SignedTx, commitment: Commitment): Promise<Confirmation> {
     this.calls.sendAndConfirm.push({ tx, commitment })
     if (this.sendError) {
@@ -154,6 +193,7 @@ export class FakeChain implements ChainClient {
    * merges every Yes+No pair into one USDC each.
    */
   private apply(tx: SignedTx) {
+    this.applyAdmin(tx)
     const signed = (tx.raw as { signed?: unknown }).signed as
       { kind: string; request: CancelOrderRequest; last?: boolean } | undefined
     if (signed?.kind !== 'cancel-order' && signed?.kind !== 'close-out-position') return
@@ -177,6 +217,23 @@ export class FakeChain implements ChainClient {
     const pairs = Math.min(held.yes, held.no)
     this.holdings.set(market, { yes: held.yes - pairs, no: held.no - pairs })
     this.usdcBalance += pairs * 1_000_000
+  }
+
+  /** What the program does for the admin transactions (R36, R41). */
+  private applyAdmin(tx: SignedTx) {
+    const signed = (tx.raw as { signed?: { kind: string; request: unknown } }).signed
+    if (signed?.kind === 'set-paused') {
+      this.adminConfig.paused = (signed.request as SetPausedRequest).paused
+      return
+    }
+    if (signed?.kind !== 'propose-admin-price' && signed?.kind !== 'finalize-admin-settle') return
+    const request = signed.request as ProposeAdminPriceRequest | FinalizeAdminSettleRequest
+    const day = this.tickerDays.find(
+      (d) => d.ticker === request.ticker && d.tradingDay === request.tradingDay,
+    )
+    if (!day) return
+    if ('priceCents' in request) day.pendingAdminPrice = request.priceCents / 100
+    else day.status = 'Final'
   }
 
   /** Simulates another wallet's order landing: pushes the new book through the subscription. */

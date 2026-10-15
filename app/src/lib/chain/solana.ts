@@ -28,16 +28,21 @@ import {
 } from './layout'
 import { TICKERS } from './types'
 import type {
+  AdminConfig,
   CancelOrderRequest,
   ChainClient,
   Commitment,
   Confirmation,
   ContractSummary,
+  FinalizeAdminSettleRequest,
   LatestPrice,
   MarketOwner,
   OpenOrder,
+  ProposeAdminPriceRequest,
+  SetPausedRequest,
   SignedTx,
   Ticker,
+  TickerDaySummary,
   TradeIntent,
   Unsubscribe,
   UnsignedTx,
@@ -584,6 +589,30 @@ class SolanaChainClient implements ChainClient {
     } catch (error) {
       throw toChainError(error)
     }
+  }
+
+  // R70 admin actions: interface stubs until the implementation lands.
+  async getAdminConfig(): Promise<AdminConfig> {
+    throw new ChainError('Unknown', 'getAdminConfig is not implemented yet.')
+  }
+
+  async listTickerDays(): Promise<TickerDaySummary[]> {
+    throw new ChainError('Unknown', 'listTickerDays is not implemented yet.')
+  }
+
+  async buildProposeAdminPrice(request: ProposeAdminPriceRequest): Promise<UnsignedTx> {
+    void request
+    throw new ChainError('Unknown', 'buildProposeAdminPrice is not implemented yet.')
+  }
+
+  async buildFinalizeAdminSettle(request: FinalizeAdminSettleRequest): Promise<UnsignedTx> {
+    void request
+    throw new ChainError('Unknown', 'buildFinalizeAdminSettle is not implemented yet.')
+  }
+
+  async buildSetPaused(request: SetPausedRequest): Promise<UnsignedTx> {
+    void request
+    throw new ChainError('Unknown', 'buildSetPaused is not implemented yet.')
   }
 }
 

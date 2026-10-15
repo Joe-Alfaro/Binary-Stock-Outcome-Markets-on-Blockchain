@@ -501,13 +501,16 @@ describe('lifecycle (R57)', () => {
         .rpc()
     }
 
-    function finalize() {
+    /** `finalize_admin_settle` is admin-only (R10, R36, D93); `signer` defaults to the admin. */
+    function finalize(signer: Keypair = roles.admin) {
       return meridian.methods
         .finalizeAdminSettle(tickerBytes(market.ticker), market.tradingDayNumber)
-        .accountsPartial({ caller: roles.automation.publicKey, tickerDay: market.tickerDay })
-        .signers([roles.automation])
+        .accountsPartial({ caller: signer.publicKey, tickerDay: market.tickerDay })
+        .signers([signer])
         .rpc()
     }
+
+    let stranger: Keypair
 
     before(async () => {
       await setDelays(proposeDelay, finalizeDelay)
@@ -520,6 +523,7 @@ describe('lifecycle (R57)', () => {
         openTs: now - 60,
       })
       holder = await freshWallet(market, { usdc: usdc(2) })
+      stranger = await freshWallet(market)
       await mintPair(holder, market, 2)
       await expectVault(market, usdc(2))
     })
@@ -543,13 +547,23 @@ describe('lifecycle (R57)', () => {
       expect('open' in day.status).to.equal(true)
     })
 
-    step('finalizing before close + finalize delay fails', async () => {
+    step('finalizing before close + finalize delay fails, for the admin too', async () => {
       expect(await chainNow()).to.be.below(market.closeTs + finalizeDelay)
+      await expectError(finalize(roles.automation), 'Unauthorized')
       await expectError(finalize(), 'AdminFinalizeTooEarly')
     })
 
+    step('from close + finalize delay a non-admin finalize is still rejected (D93)', async () => {
+      await waitUntil(market.closeTs + finalizeDelay)
+      await expectError(finalize(roles.automation), 'Unauthorized')
+      await expectError(finalize(stranger), 'Unauthorized')
+      const day = await fetchTickerDay(market)
+      expect('open' in day.status).to.equal(true)
+      expect(day.pendingAdminPrice.toNumber()).to.equal(52_500)
+    })
+
     step(
-      'from close + finalize delay anyone finalizes; every strike settles at that price',
+      'from close + finalize delay the admin finalizes; every strike settles at that price',
       async () => {
         await waitUntil(market.closeTs + finalizeDelay)
         await finalize()

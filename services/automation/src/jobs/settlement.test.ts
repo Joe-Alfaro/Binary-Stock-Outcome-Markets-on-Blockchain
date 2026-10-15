@@ -98,6 +98,9 @@ function assertSchedule(actual: number[], expected: number[], toleranceMs = 5 * 
   })
 }
 
+/** R37 at +60: the admin must finalize the pending price; the worker holds no admin key (D93). */
+const FINALIZE_ALERT = 'settlement_admin_finalize'
+
 function alertsOfKind(env: Env, kind: string) {
   return env.alerter.alerts.filter((alert) => alert.kind === kind)
 }
@@ -254,30 +257,60 @@ describe('settlement escalation schedule (R37, D14)', () => {
     await job.stop()
   })
 
-  it('finalizes a pending admin price at +60 and settles every strike at it', async () => {
+  it('at +60 with a pending admin price, alerts the admin to finalize it and never finalizes', async () => {
     const env = setup()
     const job = start(env)
     await env.clock.advanceTo(at(20))
     env.chain.proposeAdminPrice('AAPL', DAY, usd('231.07'))
 
     await env.clock.advanceTo(at(60) - SECOND)
-    assert.equal(env.chain.finalizeCalls.length, 0, 'no finalize before +60')
-    assert.ok(env.chain.marketsOf('AAPL').every((market) => !market.settlement))
+    assert.deepEqual(alertsOfKind(env, FINALIZE_ALERT), [], 'no finalize alert before +60')
 
     await env.clock.advanceTo(at(61))
-    assert.equal(env.chain.finalizeCalls.length, 1)
-    assert.deepEqual(
-      {
-        ticker: env.chain.finalizeCalls[0]?.ticker,
-        tradingDay: env.chain.finalizeCalls[0]?.tradingDay,
-      },
-      { ticker: 'AAPL', tradingDay: DAY },
+    const alerts = alertsOfKind(env, FINALIZE_ALERT)
+    assert.equal(alerts.length, 1, 'exactly one finalize alert at +60')
+    assert.ok(
+      Math.abs((alerts[0]?.at ?? Infinity) - at(60)) <= 5 * SECOND,
+      'the alert fires at +60',
     )
-    assertAllSettled(env, at(61), ['AAPL'])
+    assert.match(alerts[0]?.message ?? '', /finalize/i)
+    const details = JSON.stringify(alerts[0]?.details)
+    assert.match(details, /AAPL/)
+    assert.match(details, new RegExp(DAY))
+    assert.match(details, /231\.07/)
+    assert.deepEqual(env.chain.finalizeCalls, [], 'the worker never finalizes (D93)')
+    assert.ok(env.chain.marketsOf('AAPL').every((market) => !market.settlement))
+
+    await env.clock.advanceTo(at(90))
+    assert.equal(alertsOfKind(env, FINALIZE_ALERT).length, 1, 'the alert is not repeated')
+    assert.deepEqual(env.chain.finalizeCalls, [])
+    await job.stop()
+  })
+
+  it('once the admin finalizes, settles every strike at the admin price', async () => {
+    const env = setup()
+    const job = start(env)
+    await env.clock.advanceTo(at(20))
+    env.chain.proposeAdminPrice('AAPL', DAY, usd('231.07'))
+    await env.clock.advanceTo(at(65))
+    env.chain.finalizeByAdmin('AAPL', DAY)
+
+    await env.clock.advanceTo(at(69))
+    assertAllSettled(env, at(69), ['AAPL'])
     env.chain.marketsOf('AAPL').forEach((market) => {
       assert.deepEqual(market.settlement?.price, usd('231.07'))
       assert.equal(market.settlement?.source, 'admin')
     })
+    assert.deepEqual(env.chain.finalizeCalls, [])
+    await job.stop()
+  })
+
+  it('sends no finalize alert at +60 when no admin price is pending', async () => {
+    const env = setup()
+    const job = start(env)
+    await env.clock.advanceTo(at(75))
+    assert.deepEqual(alertsOfKind(env, FINALIZE_ALERT), [])
+    assert.deepEqual(env.chain.finalizeCalls, [])
     await job.stop()
   })
 
@@ -294,15 +327,17 @@ describe('settlement escalation schedule (R37, D14)', () => {
     await job.stop()
   })
 
-  it('finalizes promptly when the admin proposes after +60', async () => {
+  it('alerts the admin to finalize promptly when the price is proposed after +60', async () => {
     const env = setup()
     const job = start(env)
     await env.clock.advanceTo(at(70))
     env.chain.proposeAdminPrice('AAPL', DAY, usd('229.99'))
 
     await env.clock.advanceTo(at(73, 30))
-    assert.equal(env.chain.finalizeCalls.length, 1)
-    assertAllSettled(env, at(73, 30), ['AAPL'])
+    const alerts = alertsOfKind(env, FINALIZE_ALERT)
+    assert.equal(alerts.length, 1)
+    assert.match(JSON.stringify(alerts[0]?.details), /229\.99/)
+    assert.deepEqual(env.chain.finalizeCalls, [], 'the worker never finalizes (D93)')
     await job.stop()
   })
 })
@@ -482,7 +517,7 @@ describe('settlement discovery and restarts (R37)', () => {
     await second.stop()
   })
 
-  it('a worker restarted after +60 finalizes a pending admin price right away', async () => {
+  it('a worker restarted after +60 alerts the admin to finalize a pending price right away', async () => {
     const env = setup({ startMs: at(-1) })
     const first = start(env)
     await env.clock.advanceTo(at(20))
@@ -493,8 +528,10 @@ describe('settlement discovery and restarts (R37)', () => {
     await env.clock.advanceTo(at(75))
     const second = start(env)
     await env.clock.advanceTo(at(76))
-    assert.equal(env.chain.finalizeCalls.length, 1)
-    assertAllSettled(env, at(76), ['AAPL'])
+    const alerts = alertsOfKind(env, FINALIZE_ALERT)
+    assert.equal(alerts.length, 1)
+    assert.match(JSON.stringify(alerts[0]?.details), /227\.35/)
+    assert.deepEqual(env.chain.finalizeCalls, [], 'the worker never finalizes (D93)')
     await second.stop()
   })
 
@@ -520,9 +557,18 @@ describe('settlement discovery and restarts (R37)', () => {
     env.chain.proposeAdminPrice('META', PREVIOUS_DAY, usd('225.00'))
 
     const job = start(env)
+    const alerted = env.clock.now() + 2 * MINUTE
+    await env.clock.advanceTo(alerted)
+    assertAllSettled(env, alerted, ['NVDA'], PREVIOUS_DAY)
+    const alerts = alertsOfKind(env, FINALIZE_ALERT)
+    assert.equal(alerts.length, 1, "the admin is told to finalize META's pending price")
+    assert.match(JSON.stringify(alerts[0]?.details), /META/)
+    assert.deepEqual(env.chain.finalizeCalls, [], 'the worker never finalizes (D93)')
+
+    env.chain.finalizeByAdmin('META', PREVIOUS_DAY)
     const deadline = env.clock.now() + 5 * MINUTE
     await env.clock.advanceTo(deadline)
-    assertAllSettled(env, deadline, ['NVDA', 'META'], PREVIOUS_DAY)
+    assertAllSettled(env, deadline, ['META'], PREVIOUS_DAY)
     env.chain.marketsOf('META', PREVIOUS_DAY).forEach((market) => {
       assert.equal(market.settlement?.source, 'admin')
     })
