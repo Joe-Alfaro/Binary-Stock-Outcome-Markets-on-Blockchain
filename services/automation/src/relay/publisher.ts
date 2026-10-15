@@ -1,3 +1,4 @@
+import { createDemoReplaySource } from '@meridian/price-providers'
 import { publishClose, runCloses } from './close.js'
 import { createLiveRelay } from './live.js'
 import type { LiveRelay } from './live.js'
@@ -6,21 +7,27 @@ import type { RelayPublisher, RelayPublisherOptions } from './types.js'
 
 export { tradingDayNumber } from './close.js'
 
-/** The only source a demo relay may replay from (R44). */
-const DEMO_SOURCE = 'mock'
+/** The source whose closes are already replayed in demo mode (R44). */
+const REPLAY_SOURCE = 'mock'
 
-/** The relay publisher for one signer: close records after `close_ts` and live prices. */
+/**
+ * The relay publisher for one signer: close records after `close_ts` and live prices. In demo
+ * mode a live source (alpaca, D94) still gives the live prices, but demo closes replay the
+ * recorded close, labelled replayed.
+ */
 export function createRelayPublisher(options: RelayPublisherOptions): RelayPublisher {
   const demo = options.demo ?? false
-  if (demo && options.source.name !== DEMO_SOURCE) {
-    throw new Error(
-      `demo mode replays recorded closes and needs the ${DEMO_SOURCE} source, not ${options.source.name}`,
-    )
-  }
-  const log = createRelayLog(options.log, demo)
-  const context = { ...options, log }
+  const closeSource =
+    demo && options.source.name !== REPLAY_SOURCE
+      ? createDemoReplaySource({ now: () => options.clock.now() })
+      : options.source
+  const context = { ...options, source: closeSource, log: createRelayLog(options.log, demo) }
   const live: LiveRelay | null = options.live
-    ? createLiveRelay({ ...context, live: options.live })
+    ? createLiveRelay({
+        ...options,
+        live: options.live,
+        log: createRelayLog(options.log, demo && options.live.name === REPLAY_SOURCE),
+      })
     : null
 
   function liveRelay(): LiveRelay {

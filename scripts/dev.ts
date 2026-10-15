@@ -1,3 +1,5 @@
+import { RELAY_SOURCE_NAMES, isRelaySourceName } from '@meridian/price-providers'
+import type { RelaySourceName } from '@meridian/price-providers'
 import type { CommandRunner } from './deploy-devnet.js'
 import { DEFAULT_LOCAL_RPC_PORT, guardCluster } from './guard.js'
 import { isEntryPoint, loadDotEnv, runMain, spawnRunner } from './lib/cli.js'
@@ -63,6 +65,10 @@ const GOSSIP_OFFSET = 400
 /** Agave needs room for its TPU, TVU and repair sockets. */
 const DYNAMIC_PORT_COUNT = 40
 const LEDGER_DIR = 'test-ledger/dev'
+/** The worker's health and price routes listen here; the web app's charts read them. */
+const WORKER_PORT = 8080
+/** The alpaca source's keys. They go to the worker only and are never printed. */
+const ALPACA_KEY_NAMES = ['ALPACA_API_KEY', 'ALPACA_API_SECRET'] as const
 
 function isReserved(port: number) {
   return (
@@ -92,9 +98,27 @@ function validatorPorts(env: NodeJS.ProcessEnv) {
   return { ...ports, dynamicPortRange: `${dynamicPorts.low}-${dynamicPorts.high}` }
 }
 
+/**
+ * The worker's relay source: `--source`, then `RELAY_1_SOURCE`, then `mock`. Unlike the worker,
+ * make dev never switches to alpaca just because its keys are set (D94).
+ */
+function relaySource(env: NodeJS.ProcessEnv, options: DevPlanOptions): RelaySourceName {
+  const name = options.source?.trim() || env.RELAY_1_SOURCE?.trim() || 'mock'
+  if (!isRelaySourceName(name)) {
+    throw new Error(`relay source ${name} is not one of ${RELAY_SOURCE_NAMES.join(', ')}`)
+  }
+  if (name === 'alpaca') {
+    const missing = ALPACA_KEY_NAMES.filter((key) => !env[key]?.trim())
+    if (missing.length > 0) {
+      throw new Error(`the alpaca relay source needs ${missing.join(' and ')} set in .env`)
+    }
+  }
+  return name
+}
+
 /** The ordered steps of `make dev` on a local validator outside the default port block. */
 export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): DevPlan {
-  void options
+  const source = relaySource(env, options)
   const { rpcPort, faucetPort, gossipPort, dynamicPortRange } = validatorPorts(env)
   const rpcUrl = `http://127.0.0.1:${rpcPort}`
   const local = { SOLANA_CLUSTER: 'localnet', SOLANA_RPC_URL: rpcUrl }
@@ -141,14 +165,17 @@ export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): D
         id: 'worker',
         command: 'npm',
         args: ['run', 'start', '-w', 'services/automation'],
-        env: { ...local, RELAY_1_SOURCE: 'mock', DEMO_MODE: 'true' },
+        env: { ...local, RELAY_1_SOURCE: source, DEMO_MODE: 'true', PORT: String(WORKER_PORT) },
         background: true,
       },
       {
         id: 'web',
         command: 'npm',
         args: ['run', 'dev', '-w', 'app'],
-        env: { NEXT_PUBLIC_SOLANA_RPC_URL: rpcUrl },
+        env: {
+          NEXT_PUBLIC_SOLANA_RPC_URL: rpcUrl,
+          NEXT_PUBLIC_PRICE_API_URL: `http://127.0.0.1:${WORKER_PORT}`,
+        },
         background: true,
       },
     ],
@@ -157,8 +184,14 @@ export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): D
 
 /** Reads `--dry-run` and `--source <name>` from the command line. */
 export function parseDevArgs(argv: readonly string[]): DevArgs {
-  void argv
-  throw new Error('parseDevArgs is not implemented')
+  const args: DevArgs = { dryRun: argv.includes('--dry-run') }
+  const at = argv.indexOf('--source')
+  if (at === -1) return args
+  const source = argv[at + 1]
+  if (!source || source.startsWith('--')) {
+    throw new Error(`--source needs a name: ${RELAY_SOURCE_NAMES.join(', ')}`)
+  }
+  return { ...args, source }
 }
 
 function describeStep(step: DevStep) {
@@ -195,11 +228,17 @@ function deployedEnv(
   }
 }
 
+/** The Alpaca keys for the worker step, added after the step is printed. */
+function workerSecrets(step: DevStep, env: NodeJS.ProcessEnv): Record<string, string> {
+  if (step.id !== 'worker' || step.env?.RELAY_1_SOURCE !== 'alpaca') return {}
+  return Object.fromEntries(ALPACA_KEY_NAMES.map((key) => [key, env[key]?.trim() ?? '']))
+}
+
 /** Runs the plan, or only prints it when `dryRun` is set. */
 export async function runDev(options: DevOptions): Promise<DevPlan> {
   const { env, runner, dryRun = false, waitForRpc, log = console.log, programKeyDirs } = options
   guardCluster(env)
-  const plan = planDev(env)
+  const plan = planDev(env, { source: options.source })
   for (const planned of plan.steps) {
     if (dryRun) {
       log(describeStep(planned))
@@ -207,7 +246,10 @@ export async function runDev(options: DevOptions): Promise<DevPlan> {
     }
     const step = { ...planned, env: deployedEnv(planned, env, programKeyDirs) }
     log(describeStep(step))
-    await runner.run(step.command, step.args, { env: step.env, background: step.background })
+    await runner.run(step.command, step.args, {
+      env: { ...step.env, ...workerSecrets(step, env) },
+      background: step.background,
+    })
     if (step.id === 'validator' && waitForRpc) await waitForRpc(plan.rpcUrl)
   }
   return plan
@@ -233,10 +275,10 @@ async function waitForValidator(rpcUrl: string, timeoutMs = 60_000) {
 
 async function main() {
   loadDotEnv()
-  const dryRun = process.argv.includes('--dry-run')
+  const { dryRun, source } = parseDevArgs(process.argv.slice(2))
   const runner = spawnRunner()
   try {
-    await runDev({ env: process.env, runner, dryRun, waitForRpc: waitForValidator })
+    await runDev({ env: process.env, runner, dryRun, source, waitForRpc: waitForValidator })
   } catch (error) {
     runner.stopAll()
     throw error
