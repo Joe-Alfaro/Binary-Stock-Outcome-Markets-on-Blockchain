@@ -472,3 +472,12 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   worker holds no admin key), added the SDK's propose, finalize and pause builders, and built the
   web app's Admin link and `/admin` page with per-ticker-day button timing in ET.
 - **Human review:** pending MR review.
+
+## 2026-10-15 — Integration of !39, !40 and !41 (`integration/oct15`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the integration worker.
+- **What the AI did:** merged `feat/make-dev-alpaca`, `feat/v4-gaps` and `feat/admin` onto `main`
+  in that order, keeping every `AI_USAGE.md` entry; added an e2e spec that connects the admin
+  wallet and checks the Admin link fits the responsive header at 320-390 px, sharing the
+  clipping helper with the responsive-header spec.
+- **Human review:** pending MR review.
