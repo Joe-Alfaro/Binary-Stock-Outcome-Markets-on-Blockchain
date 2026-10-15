@@ -434,3 +434,14 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   Admin page decision (marked in progress where `main` doesn't have it yet), the requirement table
   for R66-R70 and the risks.
 - **Human review:** pending MR review.
+
+## 2026-10-15 — Responsive header and shell env scan (`feat/v4-gaps`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the implementation worker after a separate
+  test worker wrote the red tests.
+- **What the AI did:** made the site header wrap at narrow widths (brand and wallet on one row,
+  the nav on the next) so no page scrolls sideways at 320-390 px, implemented the shell-script
+  env scan (`$NAME`, `${NAME}`, `${NAME:-default}` including nested defaults, ignoring the
+  script's own and special variables) and added the `VALIDATOR_*` test ports and waits to
+  `.env.example`.
+- **Human review:** pending MR review.
