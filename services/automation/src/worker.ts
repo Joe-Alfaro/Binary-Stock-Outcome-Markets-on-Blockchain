@@ -132,7 +132,6 @@ export function withScanHealth(chain: ChainClient, health: HealthState, clock: C
     },
     createStrikeMarket: (params) => chain.createStrikeMarket(params),
     settleMarket: (market, slot) => chain.settleMarket(market, slot),
-    finalizeAdminSettle: (ticker, tradingDay) => chain.finalizeAdminSettle(ticker, tradingDay),
     readPendingAdminPrice: (ticker, tradingDay) => chain.readPendingAdminPrice(ticker, tradingDay),
   }
 }

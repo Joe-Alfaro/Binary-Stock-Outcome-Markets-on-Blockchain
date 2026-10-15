@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { AppProviders, WalletButton } from '../src/components'
+import { AppProviders, SiteNav, WalletButton } from '../src/components'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -12,12 +12,6 @@ export const metadata: Metadata = {
 interface RootLayoutProps {
   children: ReactNode
 }
-
-const NAV = [
-  { href: '/markets', label: 'Markets' },
-  { href: '/portfolio', label: 'Portfolio' },
-  { href: '/history', label: 'History' },
-]
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
@@ -32,13 +26,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <Link href="/" className="brand">
                 Meridian
               </Link>
-              <nav aria-label="Main" className="site-nav">
-                {NAV.map((item) => (
-                  <Link key={item.href} href={item.href}>
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
+              <SiteNav />
               <WalletButton />
             </div>
           </header>

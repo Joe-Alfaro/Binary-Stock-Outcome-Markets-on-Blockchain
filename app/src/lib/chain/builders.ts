@@ -84,6 +84,19 @@ export interface CloseOutPlan {
   split: boolean
 }
 
+/** What the admin builders need: the admin wallet signs and pays (R70). */
+export interface AdminContext {
+  programId: PublicKey
+  owner: PublicKey
+  recentBlockhash: string
+}
+
+export interface AdminTickerDay {
+  ticker: string
+  /** `YYYY-MM-DD`. */
+  tradingDay: string
+}
+
 export interface TradeBuilders {
   buildBuyYesTransaction(ctx: TradeContext, order: YesOrder): VersionedTransaction
   buildSellYesTransaction(ctx: TradeContext, order: YesOrder): VersionedTransaction
@@ -96,4 +109,13 @@ export interface TradeBuilders {
   buildCancelOrder?(ctx: CloseOutContext, orderId: bigint): VersionedTransaction
   /** R28 [G], before settlement: cancel, `settle_funds` and `merge_pair`, in as few as fit. */
   buildCloseOutPosition?(ctx: CloseOutContext): CloseOutPlan
+  /** R36: `propose_admin_price`, `priceCents` at the program's admin scale. */
+  buildProposeAdminPrice?(
+    ctx: AdminContext,
+    day: AdminTickerDay & { priceCents: number },
+  ): VersionedTransaction
+  /** R36, D93: `finalize_admin_settle`, signed by the admin. */
+  buildFinalizeAdminSettle?(ctx: AdminContext, day: AdminTickerDay): VersionedTransaction
+  /** R41: `pause` or `unpause`. */
+  buildSetPaused?(ctx: AdminContext, paused: boolean): VersionedTransaction
 }

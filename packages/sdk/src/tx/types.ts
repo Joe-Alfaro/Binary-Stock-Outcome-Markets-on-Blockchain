@@ -98,3 +98,18 @@ export interface CloseOutPlan {
   /** True when the steps did not fit one transaction and were split. */
   split: boolean
 }
+
+/** What the admin builders need: the admin signs and pays. */
+export interface AdminContext {
+  programId: PublicKey
+  /** The admin wallet (`Config.admin`). */
+  owner: PublicKey
+  recentBlockhash: string
+}
+
+/** One ticker and trading day, the unit an admin price applies to (R31, R36). */
+export interface AdminTickerDay {
+  ticker: string
+  /** `YYYY-MM-DD`. */
+  tradingDay: string
+}

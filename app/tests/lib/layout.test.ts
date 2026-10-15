@@ -4,9 +4,11 @@ import { describe, it } from 'node:test'
 import { PublicKey } from '@solana/web3.js'
 import {
   base58ToBytes,
+  decodeConfigAdmin,
   decodeLatestPrice,
   decodeMarket,
   decodeOrderBook,
+  decodeTickerDay,
   DISCRIMINATORS,
   EVENT_DISCRIMINATORS,
   EVENT_IX_TAG,
@@ -125,6 +127,60 @@ describe('Market', () => {
     assert.equal(m.settlePrice, 23142n)
     assert.equal(m.settleSource, 'Oracle')
     assert.equal(m.demo, true)
+  })
+})
+
+describe('Config admin fields (R70)', () => {
+  it('reads the admin, the admin delays and the pause flag past the oracle slots', () => {
+    const w = new Writer().raw(DISCRIMINATORS.Config).key(key(1)).key(key(2)).key(key(3))
+    for (let i = 0; i < 7; i++) w.raw(tickerBytes('AAPL'))
+    for (let slot = 0; slot < 2; slot++) {
+      w.u8(1)
+        .key(key(4))
+        .zeros(7 * 32)
+        .key(key(5))
+        .u8(0)
+    }
+    const data = w.u32(300).raw([100, 0]).u32(900).u32(3600).u8(1).u8(0).u8(254).done()
+    const config = decodeConfigAdmin(data)
+    assert.ok(config.admin.equals(key(1)))
+    assert.equal(config.proposeDelaySecs, 900)
+    assert.equal(config.finalizeDelaySecs, 3600)
+    assert.equal(config.paused, true)
+  })
+})
+
+describe('TickerDay (R70)', () => {
+  function tickerDay(status: number, pendingAt: number) {
+    return new Writer()
+      .raw(DISCRIMINATORS.TickerDay)
+      .raw(tickerBytes('MSFT'))
+      .u32(20261012)
+      .i64(1_792_000_000)
+      .u8(status)
+      .i64(0)
+      .i32(-2)
+      .u8(0)
+      .i64(23107)
+      .i64(pendingAt)
+      .u8(255)
+      .zeros(32)
+      .done()
+  }
+
+  it('reads a pending admin price in cents', () => {
+    const day = decodeTickerDay(tickerDay(0, 1_792_001_000))
+    assert.equal(day.ticker, 'MSFT')
+    assert.equal(day.tradingDay, 20261012)
+    assert.equal(day.closeTs, 1_792_000_000)
+    assert.equal(day.final, false)
+    assert.equal(day.pendingAdminPriceCents, 23107n)
+  })
+
+  it('reads no pending price when pending_admin_at is 0, and a final status', () => {
+    const day = decodeTickerDay(tickerDay(1, 0))
+    assert.equal(day.final, true)
+    assert.equal(day.pendingAdminPriceCents, null)
   })
 })
 

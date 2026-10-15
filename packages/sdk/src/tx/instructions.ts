@@ -21,6 +21,10 @@ export type Method =
   | 'cancel_order'
   | 'settle_funds'
   | 'redeem'
+  | 'propose_admin_price'
+  | 'finalize_admin_settle'
+  | 'pause'
+  | 'unpause'
 
 /** Anchor instruction discriminators: the first 8 bytes of `sha256("global:<method>")`. */
 const DISCRIMINATOR: Record<Method, Buffer> = {
@@ -31,6 +35,10 @@ const DISCRIMINATOR: Record<Method, Buffer> = {
   cancel_order: Buffer.from([95, 129, 237, 240, 8, 49, 223, 132]),
   settle_funds: Buffer.from([238, 64, 163, 96, 75, 171, 16, 33]),
   redeem: Buffer.from([184, 12, 86, 149, 70, 196, 97, 225]),
+  propose_admin_price: Buffer.from([9, 99, 128, 14, 124, 89, 59, 160]),
+  finalize_admin_settle: Buffer.from([126, 230, 2, 126, 159, 91, 21, 73]),
+  pause: Buffer.from([211, 22, 221, 251, 74, 121, 193, 47]),
+  unpause: Buffer.from([169, 144, 4, 38, 10, 141, 188, 255]),
 }
 
 /** What every builder needs to address the wallet's accounts and compile a message. */
@@ -41,7 +49,10 @@ export interface TxBase {
   lookupTables?: AddressLookupTableAccount[]
 }
 
-export function compile(ctx: TxBase, instructions: TransactionInstruction[]): VersionedTransaction {
+export function compile(
+  ctx: Pick<TxBase, 'owner' | 'recentBlockhash' | 'lookupTables'>,
+  instructions: TransactionInstruction[],
+): VersionedTransaction {
   const message = new TransactionMessage({
     payerKey: ctx.owner,
     recentBlockhash: ctx.recentBlockhash,
@@ -149,8 +160,17 @@ export function meridian(
   keys: AccountMeta[],
   args: Buffer[],
 ): TransactionInstruction {
+  return programInstruction(ctx.market.programId, method, keys, args)
+}
+
+export function programInstruction(
+  programId: PublicKey,
+  method: Method,
+  keys: AccountMeta[],
+  args: Buffer[],
+): TransactionInstruction {
   return new TransactionInstruction({
-    programId: ctx.market.programId,
+    programId,
     keys,
     data: Buffer.concat([DISCRIMINATOR[method], ...args]),
   })
