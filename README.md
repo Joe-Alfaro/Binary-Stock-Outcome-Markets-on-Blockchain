@@ -17,7 +17,8 @@ for $1.00 each from a fully collateralized vault.
 
 [ARCHITECTURE.md](ARCHITECTURE.md) has the full design: accounts, instructions, invariants, the
 closing-price rule and the test strategy. This README covers running it and the main trade-offs.
-[AGENTS.md](AGENTS.md) has the contribution rules and quality gates.
+[AGENTS.md](AGENTS.md) has the contribution rules and quality gates, and
+[TEST_RESULTS.md](TEST_RESULTS.md) has the latest full test run.
 
 ## What's in the repo
 

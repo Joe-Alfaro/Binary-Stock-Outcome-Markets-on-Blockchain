@@ -423,3 +423,12 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   showed the last close (the on-chain price, else the worker's session close) labelled "Last
   close" while the market is closed.
 - **Human review:** pending MR review.
+
+## 2026-10-15 — Test results (`docs/test-results`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as a docs worker.
+- **What the AI did:** ran every suite (the workspace unit tests, `cargo test`, the Anchor
+  integration and lifecycle tests and `make e2e`) and the quality gates on `main`, and wrote
+  `TEST_RESULTS.md` with the counts, durations, requirement coverage, property tests and known
+  limits, linked from the README.
+- **Human review:** pending MR review.
