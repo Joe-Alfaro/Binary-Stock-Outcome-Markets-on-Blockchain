@@ -80,6 +80,15 @@ keypairs just deployed, and the web app gets relay signer 1's public key (never 
 live prices. On a local validator the script airdrops SOL to every role key, so no funding is
 needed. `make dev ARGS=--dry-run` prints the steps without running them.
 
+The worker runs on the `mock` source by default, even with Alpaca keys in `.env`. To see real
+prices locally, run `make dev ARGS='--source alpaca'` (or set `RELAY_1_SOURCE=alpaca`; `--source`
+wins). The alpaca source needs `ALPACA_API_KEY` and `ALPACA_API_SECRET`; without them `make dev`
+stops before starting anything and names the missing variables. The keys go to the worker only and
+are never printed. Demo mode stays on: live prices, the charts and previous closes come from
+Alpaca, while each demo market settles from a replayed close (the recorded AAPL close of
+2026-10-12, and the hand-written mock fixtures for the other tickers), labelled `replayed` in the
+worker's log. The worker listens on port 8080, and the web app's charts read its price route there.
+
 `make gates` runs every quality gate (formatting, lint, type checks, clippy and all test suites).
 `make test` runs only the tests. `make e2e` runs the Playwright specs locally against a private
 validator and `next dev` with a flag-gated test wallet; it isn't part of the MR pipeline.
@@ -276,13 +285,13 @@ provisioned streams were available).
 All times are relative to the market's close (`close_ts`, normally 4:00 PM ET; early-close days use
 their own time). The schedule runs per ticker and day, since one price settles every strike.
 
-| Time    | What happens                                                                                                                                                                                                                                                         |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| +0      | The worker polls oracle slot 1 every 30 s and calls `settle_market` as soon as a valid close record exists. The relay publishes an official close as soon as it has one, and waits until +3 min before falling back to an exact-time price or an interpolation pair. |
-| +4 min  | Slot 2 would also be polled every 30 s. Skipped while slot 2 is disabled.                                                                                                                                                                                            |
-| +15 min | No valid price yet: the first admin alert, sent once. Polling slows to once every 3 minutes per slot. The admin can now propose the exchange's official closing price with `propose_admin_price`.                                                                    |
-| +50 min | Still no price: the second admin alert.                                                                                                                                                                                                                              |
-| +60 min | A pending admin price can be finalized with `finalize_admin_settle`, and the worker then settles every strike. Without a proposal, polling continues until an oracle answers or the admin proposes.                                                                  |
+| Time    | What happens                                                                                                                                                                                                                                                                                   |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| +0      | The worker polls oracle slot 1 every 30 s and calls `settle_market` as soon as a valid close record exists. The relay publishes an official close as soon as it has one, and waits until +3 min before falling back to an exact-time price or an interpolation pair.                           |
+| +4 min  | Slot 2 would also be polled every 30 s. Skipped while slot 2 is disabled.                                                                                                                                                                                                                      |
+| +15 min | No valid price yet: the first admin alert, sent once. Polling slows to once every 3 minutes per slot. The admin can now propose the exchange's official closing price with `propose_admin_price`.                                                                                              |
+| +50 min | Still no price: the second admin alert.                                                                                                                                                                                                                                                        |
+| +60 min | A pending admin price can be finalized with `finalize_admin_settle`, by the admin only: the worker alerts the admin, who finalizes on the web app's Admin page, and the worker then settles every strike. Without a proposal, polling continues until an oracle answers or the admin proposes. |
 
 An oracle answer always beats a pending admin price. If they differ, the program emits
 `AdminPriceMismatch` and the worker alerts. With the relay working, every market settles within

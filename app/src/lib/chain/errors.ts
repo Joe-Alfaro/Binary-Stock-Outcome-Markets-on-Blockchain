@@ -6,11 +6,14 @@ export type ChainErrorCode =
 /** A failure the UI can explain. `ChainClient` methods reject with this. */
 export class ChainError extends Error {
   readonly code: ChainErrorCode
+  /** The `meridian` program error name, such as `Unauthorized`, when the program failed. */
+  readonly programError: string | null
 
-  constructor(code: ChainErrorCode, message: string = code) {
+  constructor(code: ChainErrorCode, message: string = code, programError: string | null = null) {
     super(message)
     this.name = 'ChainError'
     this.code = code
+    this.programError = programError
   }
 }
 
@@ -24,6 +27,17 @@ const PROGRAM_ERROR_NUMBERS: Record<number, ChainErrorCode> = {
   6002: 'Paused',
   6004: 'MarketClosed',
   6005: 'MarketClosed',
+}
+
+/** Admin-action program errors by number, for failures whose logs carry only the hex code. */
+const PROGRAM_ERROR_NAMES: Record<number, string> = {
+  6001: 'Unauthorized',
+  6002: 'Paused',
+  6024: 'NonPositivePrice',
+  6028: 'TickerDayFinal',
+  6029: 'AdminProposeTooEarly',
+  6030: 'AdminFinalizeTooEarly',
+  6031: 'NoPendingAdminPrice',
 }
 
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
@@ -64,13 +78,24 @@ function fromLogs(lines: readonly string[]): ChainErrorCode | null {
   return null
 }
 
+/** The `meridian` program error name in `lines`, if the program (not the token program) failed. */
+function programErrorFromLogs(lines: readonly string[]): string | null {
+  const text = lines.join('\n')
+  const anchor = /Error Code: (\w+)\. Error Number: (\d+)/.exec(text)
+  if (anchor) return anchor[1] ?? null
+  if (lines.some((line) => line.startsWith(`Program ${TOKEN_PROGRAM} failed`))) return null
+  const hex = /custom program error: (0x[0-9a-f]+)/i.exec(text)
+  return hex ? (PROGRAM_ERROR_NAMES[Number.parseInt(hex[1] ?? '', 16)] ?? null) : null
+}
+
 /** Classifies a wallet, RPC or program error. */
 export function toChainError(error: unknown): ChainError {
   if (error instanceof ChainError) return error
   if (isWalletRejection(error)) return new ChainError('SignatureRejected')
   const message = error instanceof Error ? error.message : String(error)
-  const code = fromLogs([...logsOf(error), message])
-  return new ChainError(code ?? 'Unknown', code ? code : message)
+  const lines = [...logsOf(error), message]
+  const code = fromLogs(lines)
+  return new ChainError(code ?? 'Unknown', code ? code : message, programErrorFromLogs(lines))
 }
 
 const MESSAGES: Record<Exclude<ChainErrorCode, 'Unknown'>, string> = {
@@ -92,4 +117,30 @@ export function tradeErrorMessage(error: unknown): string {
   const chainError = toChainError(error)
   if (chainError.code === 'Unknown') return `The transaction failed: ${chainError.message}`
   return MESSAGES[chainError.code]
+}
+
+/** When each admin action opens, as shown on the page (`5:00 PM ET`), for "too early". */
+export interface AdminActionTimes {
+  proposeOpensAt?: string
+  finalizeOpensAt?: string
+}
+
+/** The message the Admin page shows for a failed admin action (R70). */
+export function adminErrorMessage(error: unknown, times: AdminActionTimes = {}): string {
+  const chainError = toChainError(error)
+  switch (chainError.programError) {
+    case 'Unauthorized':
+      return 'Only the admin wallet can do this. Connect the wallet set as the program admin.'
+    case 'AdminProposeTooEarly':
+      return `Too early: proposals open at ${times.proposeOpensAt ?? 'close + 15 minutes'}.`
+    case 'AdminFinalizeTooEarly':
+      return `Too early: finalizing opens at ${times.finalizeOpensAt ?? 'close + 60 minutes'}.`
+    case 'TickerDayFinal':
+      return 'This ticker and day already has its final price, so nothing changed.'
+    case 'NoPendingAdminPrice':
+      return 'No admin price is pending for this ticker and day. Propose one first.'
+    case 'NonPositivePrice':
+      return 'The price must be more than $0.00.'
+  }
+  return tradeErrorMessage(error)
 }

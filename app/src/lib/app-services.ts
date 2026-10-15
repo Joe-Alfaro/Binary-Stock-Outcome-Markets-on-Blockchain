@@ -4,9 +4,12 @@ import {
   buildCancelOrder,
   buildCloseOutAndRedeem,
   buildCloseOutPosition,
+  buildFinalizeAdminSettle,
+  buildProposeAdminPrice,
   buildRedeem,
   buildSellNoTransaction,
   buildSellYesTransaction,
+  buildSetPaused,
 } from '@meridian/sdk'
 import { createSolanaChainClient } from './chain'
 import type { TradeBuilders } from './chain/builders'
@@ -24,7 +27,7 @@ export interface AppServices extends Services {
   wallet: AdapterWalletPort
 }
 
-/** The SDK trade-path, unwind and redeem builders. */
+/** The SDK trade-path, unwind, redeem and admin builders. */
 export const sdkTradeBuilders: TradeBuilders = {
   buildBuyYesTransaction,
   buildSellYesTransaction,
@@ -34,6 +37,9 @@ export const sdkTradeBuilders: TradeBuilders = {
   buildCloseOutAndRedeem,
   buildCancelOrder,
   buildCloseOutPosition,
+  buildProposeAdminPrice,
+  buildFinalizeAdminSettle,
+  buildSetPaused,
 }
 
 let instance: AppServices | null = null

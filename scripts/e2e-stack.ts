@@ -203,6 +203,7 @@ async function createStack(env: NodeJS.ProcessEnv, connection: Connection) {
     settled,
     maker: Array.from(maker.secretKey),
     trader: Array.from(trader.secretKey),
+    admin: Array.from(admin.secretKey),
   }
   mkdirSync(dirname(stackFile), { recursive: true })
   writeFileSync(stackFile, JSON.stringify(stack, null, 2), { mode: 0o600 })

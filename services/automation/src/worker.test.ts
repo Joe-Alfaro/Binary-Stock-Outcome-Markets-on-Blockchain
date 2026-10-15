@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import anchor from '@anchor-lang/core'
 import { PriceSourceError, createMockSource } from '@meridian/price-providers'
@@ -97,6 +98,29 @@ describe('worker plumbing', () => {
   })
 })
 
+// R37, R43, D93: finalize_admin_settle is admin-only, and the worker holds no admin key.
+describe('the worker holds no admin key', () => {
+  const sourceOf = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
+
+  it('reads no admin key from the environment', () => {
+    const settings = loadChainSettings({
+      [KEY]: '/keys/automation.json',
+      ADMIN_KEYPAIR: '/keys/admin.json',
+    })
+    assert.equal(JSON.stringify(settings).includes('/keys/admin.json'), false)
+    ;['./worker.ts', './main.ts', './jobs/settlement.ts'].forEach((path) => {
+      assert.doesNotMatch(sourceOf(path), /ADMIN_KEYPAIR/, `${path} never loads the admin key`)
+    })
+  })
+
+  it('gives the jobs a chain client with no finalize_admin_settle', () => {
+    const clock = new FakeClock(1_000)
+    const chain = withScanHealth(new FakeChainClient(clock), createHealthState(), clock)
+    assert.equal('finalizeAdminSettle' in chain, false)
+    assert.doesNotMatch(sourceOf('./jobs/settlement.ts'), /finalizeAdminSettle/)
+  })
+})
+
 // R40, R47: the worker runs the relay publisher, which signs with its own relay key. The end-to-end
 // check that it publishes closes and live prices is `tests/worker.test.ts` on a local validator.
 describe('startWorker relay configuration', () => {
@@ -128,6 +152,43 @@ describe('startWorker relay configuration', () => {
 
   it('rejects a relay key that is not a keypair', async () => {
     await expectStartFailure({ ...env, RELAY_SIGNER_1_KEYPAIR: '[1,2,3]' }, /keypair/)
+  })
+})
+
+// R44, R67, D94: `make dev` runs the worker in demo mode on the alpaca source when asked. The
+// worker starts: live prices and previous closes come from Alpaca, demo closes from the replay.
+describe('startWorker in demo mode on the alpaca source (D94)', () => {
+  const key = (keypair = Keypair.generate()) => JSON.stringify([...keypair.secretKey])
+  const env = {
+    [KEY]: key(),
+    RELAY_SIGNER_1_KEYPAIR: key(),
+    // Nothing listens here; the worker is stopped right after it starts.
+    SOLANA_RPC_URL: 'http://127.0.0.1:1',
+    DEMO_MODE: 'true',
+    RELAY_1_SOURCE: 'alpaca',
+    ALPACA_API_KEY: 'test-key-id-PK0000',
+    ALPACA_API_SECRET: 'test-secret-0000000000',
+  }
+  // Saturday 2026-10-17: no morning job, no session, no close.
+  const SATURDAY = Date.UTC(2026, 9, 17, 15, 0)
+
+  it('starts and stops without refusing the source', { timeout: 10_000 }, async () => {
+    const clock = new FakeClock(SATURDAY)
+    const mock = createMockSource({ now: () => Math.floor(clock.now() / 1000) })
+    const alpaca = {
+      name: 'alpaca',
+      prepareClose: mock.prepareClose.bind(mock),
+      previousClose: mock.previousClose.bind(mock),
+      latest: mock.latest.bind(mock),
+    }
+    const worker = startWorker(createHealthState(), env, {
+      clock,
+      log: () => {},
+      alertSinks: [],
+      source: alpaca,
+    })
+    worker.stop()
+    await worker.done
   })
 })
 

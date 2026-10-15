@@ -91,8 +91,6 @@ export interface ChainClient {
    * has a final price, any slot settles the market at that price.
    */
   settleMarket(market: OpenMarket, slot: OracleSlot): Promise<SettleMarketResult>
-  /** Sends `finalize_admin_settle` for a ticker and day. Fails before `close_ts + 3600`. */
-  finalizeAdminSettle(ticker: string, tradingDay: string): Promise<void>
   /** The pending admin price of a ticker and day, or null when none is pending. */
   readPendingAdminPrice(ticker: string, tradingDay: string): Promise<PendingAdminPrice | null>
 }

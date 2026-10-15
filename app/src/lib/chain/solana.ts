@@ -3,6 +3,7 @@ import { assertNotMainnet } from '@meridian/sdk'
 import type { AccountInfo, GetProgramAccountsFilter } from '@solana/web3.js'
 import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js'
 import type {
+  AdminContext,
   CloseOutContext,
   MarketAccounts,
   RestingOrder,
@@ -14,10 +15,12 @@ import type { MarketAccount, OrderBookAccount, RestingOrder as BookOrder } from 
 import {
   bytesToBase64,
   base58ToBytes,
+  decodeConfigAdmin,
   decodeConfigUsdcMint,
   decodeLatestPrice,
   decodeMarket,
   decodeOrderBook,
+  decodeTickerDay,
   DISCRIMINATORS,
   eventFromCpiData,
   eventsFromLogs,
@@ -28,16 +31,21 @@ import {
 } from './layout'
 import { TICKERS } from './types'
 import type {
+  AdminConfig,
   CancelOrderRequest,
   ChainClient,
   Commitment,
   Confirmation,
   ContractSummary,
+  FinalizeAdminSettleRequest,
   LatestPrice,
   MarketOwner,
   OpenOrder,
+  ProposeAdminPriceRequest,
+  SetPausedRequest,
   SignedTx,
   Ticker,
+  TickerDaySummary,
   TradeIntent,
   Unsubscribe,
   UnsignedTx,
@@ -63,6 +71,8 @@ const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 const ATA_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
 /** A healthy subscription that misses this many polled changes is treated as failed. */
 const WATCHDOG_INTERVAL_MS = 5000
+/** A finalized ticker-day stays on the Admin page this long after its close. */
+const FINAL_TICKER_DAY_SECS = 24 * 60 * 60
 /** Signatures scanned per address for history. */
 const SIGNATURE_LIMIT = 500
 /** A latest-price fallback poll keeps the display fresh if the websocket drops quietly. */
@@ -585,6 +595,94 @@ class SolanaChainClient implements ChainClient {
       throw toChainError(error)
     }
   }
+
+  async getAdminConfig(): Promise<AdminConfig> {
+    const info = await this.connection.getAccountInfo(this.pda([seed('config')]))
+    if (!info) throw new ChainError('Unknown', 'The program config account is missing.')
+    const config = decodeConfigAdmin(Uint8Array.from(info.data))
+    return { ...config, admin: config.admin.toBase58() }
+  }
+
+  /** Open ticker-days, and those finalized within a day of their close. Latest close first. */
+  async listTickerDays(): Promise<TickerDaySummary[]> {
+    const accounts = await this.connection.getProgramAccounts(this.programId, {
+      commitment: COMMITMENT,
+      filters: [
+        {
+          memcmp: {
+            offset: 0,
+            bytes: bytesToBase64(Uint8Array.from(DISCRIMINATORS.TickerDay)),
+            encoding: 'base64',
+          },
+        },
+      ],
+    })
+    const nowTs = this.now()
+    return accounts
+      .flatMap(({ account }): TickerDaySummary[] => {
+        const day = decodeTickerDay(Uint8Array.from(account.data))
+        const ticker = TICKERS.find((t) => t === day.ticker)
+        if (!ticker) return []
+        if (day.final && nowTs - day.closeTs > FINAL_TICKER_DAY_SECS) return []
+        const pending = day.pendingAdminPriceCents
+        return [
+          {
+            ticker,
+            tradingDay: isoDay(day.tradingDay),
+            closeTs: day.closeTs,
+            status: day.final ? 'Final' : 'Open',
+            pendingAdminPrice: pending === null ? null : scaled(pending, -2),
+          },
+        ]
+      })
+      .sort((a, b) => b.closeTs - a.closeTs || a.ticker.localeCompare(b.ticker))
+  }
+
+  private adminBuilder<
+    K extends 'buildProposeAdminPrice' | 'buildFinalizeAdminSettle' | 'buildSetPaused',
+  >(name: K): NonNullable<TradeBuilders[K]> {
+    const build = this.config.builders?.[name]
+    if (!build) throw new ChainError('Unknown', 'Admin actions are not available in this build.')
+    return build
+  }
+
+  private async adminContext(admin: string): Promise<{ ctx: AdminContext; height: number }> {
+    const latest = await this.blockhash()
+    return {
+      ctx: {
+        programId: this.programId,
+        owner: new PublicKey(admin),
+        recentBlockhash: latest.blockhash,
+      },
+      height: latest.lastValidBlockHeight,
+    }
+  }
+
+  async buildProposeAdminPrice(request: ProposeAdminPriceRequest): Promise<UnsignedTx> {
+    const build = this.adminBuilder('buildProposeAdminPrice')
+    const { ctx, height } = await this.adminContext(request.admin)
+    const { ticker, tradingDay, priceCents } = request
+    return this.wrap(build(ctx, { ticker, tradingDay, priceCents }), height)
+  }
+
+  async buildFinalizeAdminSettle(request: FinalizeAdminSettleRequest): Promise<UnsignedTx> {
+    const build = this.adminBuilder('buildFinalizeAdminSettle')
+    const { ctx, height } = await this.adminContext(request.admin)
+    const { ticker, tradingDay } = request
+    return this.wrap(build(ctx, { ticker, tradingDay }), height)
+  }
+
+  async buildSetPaused(request: SetPausedRequest): Promise<UnsignedTx> {
+    const build = this.adminBuilder('buildSetPaused')
+    const { ctx, height } = await this.adminContext(request.admin)
+    return this.wrap(build(ctx, request.paused), height)
+  }
+}
+
+/** `20261012` → `2026-10-12`. */
+function isoDay(tradingDay: number): string {
+  const text = String(tradingDay)
+  return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`
 }
 
 function referenceYesPrice(book: YesBook | null): number | null {

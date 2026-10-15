@@ -38,6 +38,8 @@ export interface E2eStack {
   maker: number[]
   /** The wallet the app's test adapter connects, with SOL and mock USDC. */
   trader: number[]
+  /** `Config.admin`, which the app's test adapter connects to see the Admin link (R70). */
+  admin: number[]
 }
 
 export function loadStack(): E2eStack {

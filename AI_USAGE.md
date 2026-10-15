@@ -443,3 +443,41 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   `TEST_RESULTS.md` with the counts, durations, requirement coverage, property tests and known
   limits, linked from the README.
 - **Human review:** pending MR review.
+
+## 2026-10-15 — make dev with the Alpaca source (`feat/make-dev-alpaca`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the test and implementation workers.
+- **What the AI did:** wrote the D94 tests, then added `make dev`'s `--source` option (and
+  `RELAY_1_SOURCE`), which checks the Alpaca keys up front and hands them to the worker only,
+  never printing them; let the demo relay run on a live source, replaying the recorded close for
+  demo settlement; pointed the web app's charts at the local worker; updated the README.
+- **Human review:** pending MR review.
+
+## 2026-10-15 — Responsive header and shell env scan (`feat/v4-gaps`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the implementation worker after a separate
+  test worker wrote the red tests.
+- **What the AI did:** made the site header wrap at narrow widths (brand and wallet on one row,
+  the nav on the next) so no page scrolls sideways at 320-390 px, implemented the shell-script
+  env scan (`$NAME`, `${NAME}`, `${NAME:-default}` including nested defaults, ignoring the
+  script's own and special variables) and added the `VALIDATOR_*` test ports and waits to
+  `.env.example`.
+- **Human review:** pending MR review.
+
+## 2026-10-15 — Admin-only finalize and the Admin page (`feat/admin`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the test and implementation workers.
+- **What the AI did:** wrote the R10, R36, R37 and R70 tests, then made `finalize_admin_settle`
+  admin-only, replaced the worker's +60 finalize with a `settlement_admin_finalize` alert (the
+  worker holds no admin key), added the SDK's propose, finalize and pause builders, and built the
+  web app's Admin link and `/admin` page with per-ticker-day button timing in ET.
+- **Human review:** pending MR review.
+
+## 2026-10-15 — Integration of !39, !40 and !41 (`integration/oct15`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the integration worker.
+- **What the AI did:** merged `feat/make-dev-alpaca`, `feat/v4-gaps` and `feat/admin` onto `main`
+  in that order, keeping every `AI_USAGE.md` entry; added an e2e spec that connects the admin
+  wallet and checks the Admin link fits the responsive header at 320-390 px, sharing the
+  clipping helper with the responsive-header spec.
+- **Human review:** pending MR review.
