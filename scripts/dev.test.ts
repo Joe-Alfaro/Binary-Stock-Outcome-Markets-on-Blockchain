@@ -374,3 +374,86 @@ describe('make dev relay source (R60, R67, D94)', () => {
     assert.equal(web.env?.NEXT_PUBLIC_PRICE_API_URL, 'http://127.0.0.1:8080')
   })
 })
+
+// R60 (validation round 5): a second local stack can't start while another checkout's worker holds
+// 8080, so the worker's health and price port is configurable and the web app's charts follow it.
+describe('make dev worker port (R60)', () => {
+  function workerPort(plan: ReturnType<typeof planDev>) {
+    return step(plan.steps, 'worker').env?.PORT
+  }
+  function priceApiUrl(plan: ReturnType<typeof planDev>) {
+    return step(plan.steps, 'web').env?.NEXT_PUBLIC_PRICE_API_URL
+  }
+
+  it('defaults to 8080 for the worker and the web app', () => {
+    const plan = planDev({})
+    assert.equal(workerPort(plan), '8080')
+    assert.equal(priceApiUrl(plan), 'http://127.0.0.1:8080')
+  })
+
+  it('takes the port from DEV_WORKER_PORT and points the web app at it', () => {
+    const plan = planDev({ DEV_WORKER_PORT: '8095' })
+    assert.equal(workerPort(plan), '8095')
+    assert.equal(priceApiUrl(plan), 'http://127.0.0.1:8095')
+  })
+
+  it('takes the port from the workerPort option and points the web app at it', () => {
+    const plan = planDev({}, { workerPort: 8096 })
+    assert.equal(workerPort(plan), '8096')
+    assert.equal(priceApiUrl(plan), 'http://127.0.0.1:8096')
+  })
+
+  it('lets the workerPort option win over DEV_WORKER_PORT', () => {
+    const plan = planDev({ DEV_WORKER_PORT: '8095' }, { workerPort: 8096 })
+    assert.equal(workerPort(plan), '8096')
+    assert.equal(priceApiUrl(plan), 'http://127.0.0.1:8096')
+  })
+
+  it("ignores PORT from .env, which Railway's worker reads, so the default stays 8080", () => {
+    const plan = planDev({ PORT: '3000' })
+    assert.equal(workerPort(plan), '8080')
+    assert.equal(priceApiUrl(plan), 'http://127.0.0.1:8080')
+  })
+
+  it('refuses a DEV_WORKER_PORT that is not a port number, naming the variable', () => {
+    assert.throws(() => planDev({ DEV_WORKER_PORT: 'abc' }), /DEV_WORKER_PORT/)
+    assert.throws(() => planDev({ DEV_WORKER_PORT: '70000' }), /DEV_WORKER_PORT/)
+  })
+
+  it("reads --worker-port from make dev's ARGS", () => {
+    assert.deepEqual(parseDevArgs(['--worker-port', '8096']), { dryRun: false, workerPort: 8096 })
+    assert.deepEqual(parseDevArgs(['--dry-run', '--source', 'mock', '--worker-port', '8096']), {
+      dryRun: true,
+      source: 'mock',
+      workerPort: 8096,
+    })
+  })
+
+  it('refuses --worker-port without a port number', () => {
+    assert.throws(() => parseDevArgs(['--worker-port']), /--worker-port/)
+    assert.throws(() => parseDevArgs(['--worker-port', '--dry-run']), /--worker-port/)
+    assert.throws(() => parseDevArgs(['--worker-port', 'abc']), /--worker-port/)
+  })
+
+  it('prints the chosen port for the worker and the web app in the dry run', async () => {
+    const { runner } = recordingRunner()
+    const lines: string[] = []
+    await runDev({
+      env: { DEV_WORKER_PORT: '8095' },
+      runner,
+      dryRun: true,
+      log: (line) => lines.push(line),
+    })
+    const worker = lines.find((line) => line.startsWith('[worker]')) ?? ''
+    const web = lines.find((line) => line.startsWith('[web]')) ?? ''
+    assert.match(worker, /\bPORT=8095\b/)
+    assert.match(web, /NEXT_PUBLIC_PRICE_API_URL=http:\/\/127\.0\.0\.1:8095\b/)
+  })
+
+  it('passes the workerPort option through to the plan', async () => {
+    const { runner } = recordingRunner()
+    const plan = await runDev({ env: {}, runner, dryRun: true, workerPort: 8096, log: () => {} })
+    assert.equal(workerPort(plan), '8096')
+    assert.equal(priceApiUrl(plan), 'http://127.0.0.1:8096')
+  })
+})

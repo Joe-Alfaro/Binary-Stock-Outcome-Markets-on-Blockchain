@@ -36,11 +36,15 @@ export interface DevArgs {
   dryRun: boolean
   /** `--source <name>`: the worker's relay source; wins over `RELAY_1_SOURCE`. */
   source?: string
+  /** `--worker-port <port>`: the worker's health and price port; wins over `DEV_WORKER_PORT`. */
+  workerPort?: number
 }
 
 export interface DevPlanOptions {
   /** The worker's relay source; falls back to `RELAY_1_SOURCE`, then `mock`. */
   source?: string
+  /** The worker's health and price port; falls back to `DEV_WORKER_PORT`, then 8080. */
+  workerPort?: number
 }
 
 export interface DevOptions {
@@ -49,6 +53,8 @@ export interface DevOptions {
   dryRun?: boolean
   /** The worker's relay source, as `DevPlanOptions.source`. */
   source?: string
+  /** The worker's port, as `DevPlanOptions.workerPort`. */
+  workerPort?: number
   /** Resolves once the validator answers on the RPC URL. Skipped when not given. */
   waitForRpc?: (rpcUrl: string) => Promise<void>
   log?: (line: string) => void
