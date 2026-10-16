@@ -481,3 +481,14 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   wallet and checks the Admin link fits the responsive header at 320-390 px, sharing the
   clipping helper with the responsive-header spec.
 - **Human review:** pending MR review.
+
+## 2026-10-16 — Validation round 5 polish (`feat/v5-polish`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the implementation worker after a separate
+  test worker wrote the red tests.
+- **What the AI did:** added the test-only variables and `DEV_WORKER_PORT` to `.env.example`,
+  made the Admin page read "Closes at" before the close and "Closed at" from it on, made the
+  `make dev` worker port configurable (`--worker-port`, then `DEV_WORKER_PORT`, then 8080) with the
+  web app's charts following it, dropped the admin CLI from the README's unfinished list and
+  refreshed TEST_RESULTS.md from a full run.
+- **Human review:** pending MR review.
