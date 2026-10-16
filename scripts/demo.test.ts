@@ -9,6 +9,7 @@ import {
   type Commitment,
   type DemoBalances,
   type DemoClient,
+  type DemoOptions,
   type DemoResult,
   type TradePath,
   type WalletBalances,
@@ -99,7 +100,13 @@ function fakeDemo(genesisHash = DEVNET_GENESIS_HASH, broken?: Broken) {
     },
     async createDemoMarket(params) {
       created.push(params)
-      return { market: 'Market111', signature: send('create') }
+      const opensAt = Math.floor(clock.now / 1000)
+      return {
+        market: 'Market111',
+        signature: send('create'),
+        mintOpenTs: opensAt,
+        tradingOpenTs: opensAt,
+      }
     },
     async mintPair(_market, quantity) {
       // The counterparty mints what it quotes; a trader holding both sides couldn't Buy Yes (R28).
@@ -332,6 +339,163 @@ describe('runDemo (R61, R55, R38)', () => {
       await assert.rejects(runDemo({ env, ...fake.options }), /mainnet/i)
       assert.deepEqual(fake.log.calls, [])
     })
+  })
+})
+
+/** How far the fake validator clock runs behind the wall clock on a loaded host. */
+const LAG_MS = 30_000
+/** Seconds after creation that the lagging market opens trading, so the two waits differ. */
+const TRADING_OPEN_AFTER_SECS = 10
+/** Wall time after which a fake run is stuck in a wait loop, not waiting for the clock. */
+const RUNAWAY_MS = 60 * 60 * 1000
+
+/**
+ * The fake demo with a validator clock LAG_MS behind the wall clock, like `make demo` on a loaded
+ * localnet. The market opens minting at wall-clock "now" and trading TRADING_OPEN_AFTER_SECS
+ * later, and the program's checks run against the validator clock: mint_pair before mint_open_ts
+ * fails with MintNotOpen (6003), an order before trading_open_ts with TradingNotOpen. `stopAt`
+ * freezes the validator clock at that many seconds after creation.
+ */
+function laggingDemo({ stopAt }: { stopAt?: number } = {}) {
+  const fake = fakeDemo()
+  const { client, now } = fake.options
+  let createdAt: number | undefined
+  const chainNow = () => {
+    const lagging = Math.floor((now() - LAG_MS) / 1000)
+    return createdAt === undefined || stopAt === undefined
+      ? lagging
+      : Math.min(lagging, createdAt + stopAt)
+  }
+  const opens = { mintOpenTs: Number.POSITIVE_INFINITY, tradingOpenTs: Number.POSITIVE_INFINITY }
+  const chainAt = { mint: [] as number[], order: [] as number[] }
+  const lagging: DemoClient = {
+    ...client,
+    async createDemoMarket(params) {
+      const created = await client.createDemoMarket(params)
+      const opensAt = Math.floor(now() / 1000)
+      createdAt = chainNow()
+      opens.mintOpenTs = opensAt
+      opens.tradingOpenTs = opensAt + TRADING_OPEN_AFTER_SECS
+      return { ...created, ...opens }
+    },
+    async chainNow() {
+      return chainNow()
+    },
+    async mintPair(market, quantity) {
+      if (chainNow() < opens.mintOpenTs) {
+        throw new Error(
+          `MintPair simulation failed: MintNotOpen (6003): validator clock ${chainNow()} < mint_open_ts ${opens.mintOpenTs}`,
+        )
+      }
+      chainAt.mint.push(chainNow())
+      return client.mintPair(market, quantity)
+    },
+    async quote(market, path, quantity) {
+      if (chainNow() < opens.tradingOpenTs) {
+        throw new Error(
+          `Quote ${path} simulation failed: TradingNotOpen: validator clock ${chainNow()} < trading_open_ts ${opens.tradingOpenTs}`,
+        )
+      }
+      chainAt.order.push(chainNow())
+      return client.quote(market, path, quantity)
+    },
+    async trade(market, path, quantity) {
+      if (chainNow() < opens.tradingOpenTs) {
+        throw new Error(
+          `Trade ${path} simulation failed: TradingNotOpen: validator clock ${chainNow()} < trading_open_ts ${opens.tradingOpenTs}`,
+        )
+      }
+      chainAt.order.push(chainNow())
+      return client.trade(market, path, quantity)
+    },
+  }
+  const { sleep } = fake.options
+  const options: DemoOptions = {
+    ...fake.options,
+    env: { SOLANA_CLUSTER: 'localnet' },
+    client: lagging,
+    async sleep(ms) {
+      await sleep(ms)
+      if (now() - START_MS > RUNAWAY_MS) throw new Error('runaway wait: the demo never gave up')
+    },
+  }
+  return { ...fake, options, opens, chainAt, wallElapsedMs: () => now() - START_MS }
+}
+
+// R61 (validation): under load, `make demo` on localnet failed with MintPair simulation failed:
+// MintNotOpen (6003). The demo opens the market at wall-clock now and minted straight away, but
+// the program checks mint_open_ts and trading_open_ts against the validator's Clock sysvar, which
+// lags the wall clock. The demo waits on the validator clock before minting and trading, as it
+// already does before settling, and gives up with a clear error when the clock never gets there.
+describe('runDemo waits for the validator clock before minting and trading (R61)', () => {
+  it('mints only once the validator clock reaches mint_open_ts', async () => {
+    const fake = laggingDemo()
+    await runDemo(fake.options)
+    assert.equal(fake.chainAt.mint.length, 1, `calls: ${fake.log.calls.join(', ')}`)
+    assert.ok((fake.chainAt.mint[0] ?? 0) >= fake.opens.mintOpenTs)
+  })
+
+  it('places every quote and trade only once the validator clock reaches trading_open_ts', async () => {
+    const fake = laggingDemo()
+    await runDemo(fake.options)
+    assert.equal(fake.chainAt.order.length, TRADE_PATHS.length * 2)
+    assert.ok(fake.chainAt.order.every((chainNow) => chainNow >= fake.opens.tradingOpenTs))
+  })
+
+  it('runs the whole lifecycle through to the redeem despite the lag', async () => {
+    const fake = laggingDemo()
+    const result = await runDemo(fake.options)
+    const steps = result.transactions.map((tx) => tx.step)
+    assert.deepEqual(
+      ['create', 'mint', ...TRADE_PATHS, 'publish', 'settle', 'redeem'].filter(
+        (step) => !steps.includes(step),
+      ),
+      [],
+      `steps: ${steps.join(', ')}`,
+    )
+  })
+
+  it('never fails with MintNotOpen or TradingNotOpen because of the lag', async () => {
+    const fake = laggingDemo()
+    await runDemo(fake.options).catch((error: unknown) => {
+      assert.doesNotMatch(String(error), /MintNotOpen|TradingNotOpen/)
+      throw error
+    })
+  })
+
+  it('says it is waiting for the validator clock', async () => {
+    const fake = laggingDemo()
+    await runDemo(fake.options)
+    assert.ok(
+      fake.lines.some((line) => /waiting.*validator clock.*mint_open_ts/i.test(line)),
+      `output:\n${fake.lines.join('\n')}`,
+    )
+  })
+
+  it('gives up with a clear error when the validator clock never reaches mint_open_ts', async () => {
+    const fake = laggingDemo({ stopAt: 0 })
+    await assert.rejects(runDemo(fake.options), (error: Error) => {
+      assert.doesNotMatch(error.message, /runaway|MintNotOpen/)
+      assert.match(error.message, /validator clock/i)
+      assert.match(error.message, /mint_open_ts/)
+      return true
+    })
+    assert.equal(fake.log.indexOf('mint'), -1, 'minted before the market opened')
+    assert.ok(fake.wallElapsedMs() <= 10 * 60 * 1000, `waited ${fake.wallElapsedMs()} ms`)
+  })
+
+  it('gives up with a clear error when the validator clock stops before trading_open_ts', async () => {
+    // Late enough for the mint, too early for any order.
+    const fake = laggingDemo({ stopAt: LAG_MS / 1000 + TRADING_OPEN_AFTER_SECS / 2 })
+    await assert.rejects(runDemo(fake.options), (error: Error) => {
+      assert.doesNotMatch(error.message, /runaway|TradingNotOpen/)
+      assert.match(error.message, /validator clock/i)
+      assert.match(error.message, /trading_open_ts/)
+      return true
+    })
+    assert.ok(fake.log.indexOf('mint') >= 0, `calls: ${fake.log.calls.join(', ')}`)
+    assert.equal(fake.chainAt.order.length, 0, 'placed an order before trading opened')
+    assert.ok(fake.wallElapsedMs() <= 10 * 60 * 1000, `waited ${fake.wallElapsedMs()} ms`)
   })
 })
 
