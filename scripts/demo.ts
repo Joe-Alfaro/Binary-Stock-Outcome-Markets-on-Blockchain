@@ -44,12 +44,19 @@ export interface DemoBalances {
   counterparty: WalletBalances
 }
 
+/** A created demo market and the open times it was created with, in Unix seconds. */
+export interface DemoMarketCreated {
+  market: string
+  signature: string
+  /** The program rejects `mint_pair` while the validator clock is before it (MintNotOpen). */
+  mintOpenTs: number
+  /** The program rejects orders while the validator clock is before it (TradingNotOpen). */
+  tradingOpenTs: number
+}
+
 /** Chain calls the demo makes. Each send returns its signature; `confirm` waits for it. */
 export interface DemoClient extends GenesisRpc {
-  createDemoMarket(params: {
-    ticker: string
-    closeTs: number
-  }): Promise<{ market: string; signature: string }>
+  createDemoMarket(params: { ticker: string; closeTs: number }): Promise<DemoMarketCreated>
   /** The counterparty mints the pairs it quotes from. */
   mintPair(market: string, quantity: number): Promise<string>
   /** The counterparty rests the order that the trader's `path` fills against. */
@@ -169,7 +176,13 @@ export function createDryRunClient(now: () => number = Date.now): DemoClient {
       return 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG'
     },
     async createDemoMarket({ ticker }) {
-      return { market: `DryRun${ticker}Market`, signature: signature('create') }
+      const opensAt = Math.floor(now() / 1000)
+      return {
+        market: `DryRun${ticker}Market`,
+        signature: signature('create'),
+        mintOpenTs: opensAt,
+        tradingOpenTs: opensAt,
+      }
     },
     async mintPair(_market, quantity) {
       const tokens = BigInt(quantity) * UNIT

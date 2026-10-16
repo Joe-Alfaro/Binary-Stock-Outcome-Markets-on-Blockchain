@@ -622,7 +622,12 @@ export function createDemoClient(env: NodeJS.ProcessEnv): DemoClient {
         yesEscrow: pda(meridian.programId, [encoder.encode('yes_escrow'), market.toBytes()]),
         usdcEscrow: pda(meridian.programId, [encoder.encode('usdc_escrow'), market.toBytes()]),
       })
-      return { market: market.toBase58(), signature }
+      return {
+        market: market.toBase58(),
+        signature,
+        mintOpenTs: opensAt,
+        tradingOpenTs: opensAt,
+      }
     },
 
     async mintPair(market, quantity) {
