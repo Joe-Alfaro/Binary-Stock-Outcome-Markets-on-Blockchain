@@ -260,27 +260,32 @@ function assertPathFilled(path: TradePath, before: WalletBalances, after: Wallet
 }
 
 /**
- * Sleeps until the validator's clock reaches `closeTs`. The program checks close_ts against the
- * Clock sysvar, which can run behind the wall clock on a loaded host, so waiting on the wall clock
- * alone gets SettleTooEarly. Gives up once the validator is CHAIN_CLOCK_GRACE_SECS of wall time
- * past close_ts and still behind it.
+ * Sleeps until the validator's clock reaches `ts`, the market's `field`. The program checks
+ * mint_open_ts, trading_open_ts and close_ts against the Clock sysvar, which can run behind the wall
+ * clock on a loaded host, so waiting on the wall clock alone gets MintNotOpen, TradingNotOpen or
+ * SettleTooEarly. Gives up once the validator is CHAIN_CLOCK_GRACE_SECS of wall time past `ts` and
+ * still behind it.
  */
 async function waitForChainClock(
   client: DemoClient,
-  closeTs: number,
+  field: 'mint_open_ts' | 'trading_open_ts' | 'close_ts',
+  ts: number,
   { now, sleep, log }: Required<Pick<DemoOptions, 'now' | 'sleep' | 'log'>>,
 ) {
+  const giveUpAt = ts + CHAIN_CLOCK_GRACE_SECS
   for (;;) {
     const chainNow = await client.chainNow()
-    const behindSecs = closeTs - chainNow
+    const behindSecs = ts - chainNow
     if (behindSecs <= 0) return
-    if (now() / 1000 > closeTs + CHAIN_CLOCK_GRACE_SECS) {
+    const leftSecs = giveUpAt - now() / 1000
+    if (leftSecs < 0) {
       throw new Error(
-        `The validator clock (${chainNow}) is still behind close_ts (${closeTs}) ${CHAIN_CLOCK_GRACE_SECS} s after it`,
+        `The validator clock (${chainNow}) is still behind ${field} (${ts}) ${CHAIN_CLOCK_GRACE_SECS} s after it`,
       )
     }
-    log(`Waiting ${behindSecs} s for the validator clock to reach close_ts`)
-    await sleep(behindSecs * 1000)
+    log(`Waiting ${behindSecs} s for the validator clock to reach ${field}`)
+    // Never sleep past the give-up time, so a clock far behind still fails within the grace.
+    await sleep(Math.min(behindSecs, Math.ceil(leftSecs) + 1) * 1000)
   }
 }
 
@@ -333,7 +338,10 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
   await confirm('create', created.signature)
   const { market } = created
 
+  const clock = { now, sleep, log }
+  await waitForChainClock(client, 'mint_open_ts', created.mintOpenTs, clock)
   await confirm('mint', await client.mintPair(market, PAIRS), market)
+  await waitForChainClock(client, 'trading_open_ts', created.tradingOpenTs, clock)
   for (const path of TRADE_PATHS) {
     const quantity = TRADE_QUANTITIES[path]
     const quoted = await confirm(
@@ -347,7 +355,7 @@ export async function runDemo(options: DemoOptions): Promise<DemoResult> {
     }
   }
 
-  await waitForChainClock(client, closeTs, { now, sleep, log })
+  await waitForChainClock(client, 'close_ts', closeTs, clock)
   await confirm('publish', await client.publishRelayClose(market), market)
   const { confirmedAt: settledAt } = await confirm('settle', await client.settle(market), market)
   const settlementDelaySecs = (settledAt - closeTs * 1000) / 1000

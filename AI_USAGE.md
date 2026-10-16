@@ -481,3 +481,13 @@ One entry per merged change: what AI tools did and what a human reviewed or chan
   wallet and checks the Admin link fits the responsive header at 320-390 px, sharing the
   clipping helper with the responsive-header spec.
 - **Human review:** pending MR review.
+
+## 2026-10-16 — Demo waits on the validator clock before mint and trade (`feat/demo-clock`)
+
+- **Tool:** Claude Code (Claude Opus 5.5), running as the implementation worker after a separate
+  test worker wrote the red tests.
+- **What the AI did:** generalized the demo's settle wait into one validator-clock wait that the
+  demo runs before `mint_pair` (mint_open_ts), before the first quote or order (trading_open_ts)
+  and before settling (close_ts), logging while it waits and failing with an error naming the
+  validator clock and the field once it is 5 minutes of wall time past the target.
+- **Human review:** pending MR review.
