@@ -222,6 +222,50 @@ describe('R70 button timing per close_ts', () => {
   })
 })
 
+describe('R70 close-time label per close_ts', () => {
+  it('reads "Closes at 4:00 PM ET" before close_ts', async () => {
+    renderWith(adminHarness(REGULAR_CLOSE - 1), <AdminPage />)
+    const day = await daySection()
+    assert.ok(within(day).getByText(/Closes at 4:00 PM ET/))
+    assert.equal(within(day).queryByText(/Closed at/), null)
+  })
+
+  it('reads "Closed at 4:00 PM ET" at close_ts', async () => {
+    renderWith(adminHarness(REGULAR_CLOSE), <AdminPage />)
+    const day = await daySection()
+    assert.ok(within(day).getByText(/Closed at 4:00 PM ET/))
+    assert.equal(within(day).queryByText(/Closes at/), null)
+  })
+
+  it('reads "Closed at 4:00 PM ET" after close_ts', async () => {
+    renderWith(adminHarness(PROPOSE_AT), <AdminPage />)
+    const day = await daySection()
+    assert.ok(within(day).getByText(/Closed at 4:00 PM ET/))
+    assert.equal(within(day).queryByText(/Closes at/), null)
+  })
+
+  it('on an early-close day reads "Closes at 1:00 PM ET" before close_ts', async () => {
+    const harness = adminHarness(EARLY_CLOSE - 1, {
+      days: [tickerDay({ tradingDay: '2026-11-27', closeTs: EARLY_CLOSE })],
+    })
+    renderWith(harness, <AdminPage />)
+    const day = await daySection()
+    assert.ok(within(day).getByText(/Closes at 1:00 PM ET/))
+  })
+
+  it('switches to "Closed at" on its own when the clock reaches close_ts', async () => {
+    const harness = adminHarness(REGULAR_CLOSE - 1)
+    renderWith(harness, <AdminPage />)
+    const day = await daySection()
+    assert.ok(within(day).getByText(/Closes at 4:00 PM ET/))
+    harness.clock.now = REGULAR_CLOSE
+    await waitFor(
+      () => within(day).queryByText(/Closed at 4:00 PM ET/) !== null,
+      'the label reads "Closed at" at close_ts without a reload',
+    )
+  })
+})
+
 /** Polls `check` for up to 3 s, for state that follows a timer such as `useNow`. */
 async function waitFor(check: () => boolean, message: string): Promise<void> {
   const deadline = Date.now() + 3000

@@ -10,12 +10,16 @@ import { REPO_ROOT } from './test-support.js'
  * Set by the platform or the shell, never by the user's .env. PORT is not one of them: the
  * worker's health server reads it, so .env.example must document it (R62).
  */
-const PLATFORM_VARS = new Set(['NODE_ENV', 'CI', 'HOME', 'PATH'])
+const PLATFORM_VARS = new Set(['NODE_ENV', 'CI', 'HOME', 'PATH', 'TZ'])
 
 const SOURCE_FILE = /\.(ts|tsx|js|mjs|cjs)$/
 /** Shell scripts, including the extensionless Husky hooks. */
 const SHELL_FILE = /(\.sh$|^\.husky\/[^_/][^/]*$)/
 const SKIPPED = /(\.test\.tsx?$|test-support\.ts$|(^|\/)fixtures\/)/
+/** Test code: unit and integration tests, Playwright specs and their shared helpers. */
+const TEST_FILE = /(\.(test|spec)\.tsx?$|test-support\.ts$)/
+/** This file's own fixtures are env reads in strings, not reads. */
+const SCAN_FIXTURES = 'scripts/lib/env-scan.test.ts'
 
 function trackedFiles() {
   return execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
@@ -26,6 +30,27 @@ function trackedFiles() {
 
 function trackedSourceFiles() {
   return trackedFiles().filter((path) => SOURCE_FILE.test(path) && !SKIPPED.test(path))
+}
+
+function trackedTestFiles() {
+  return trackedFiles().filter(
+    (path) => SOURCE_FILE.test(path) && TEST_FILE.test(path) && path !== SCAN_FIXTURES,
+  )
+}
+
+/**
+ * Names listed as commented `# NAME=…` lines in the test-only section of a .env file: from the
+ * first comment line that says "test-only" to the end of the file.
+ */
+function commentedTestOnlyNames(content: string): Set<string> {
+  const lines = content.split('\n')
+  const start = lines.findIndex((line) => /^\s*#.*\btest-only\b/i.test(line))
+  if (start < 0) return new Set()
+  const names = lines
+    .slice(start)
+    .map((line) => /^\s*#\s*([A-Z][A-Z0-9_]*)=/.exec(line)?.[1])
+    .filter((name): name is string => name !== undefined)
+  return new Set(names)
 }
 
 function trackedShellScripts() {
@@ -226,6 +251,52 @@ describe('.env.example (R62)', () => {
     const health = readFileSync(join(REPO_ROOT, 'services/automation/src/health.ts'), 'utf8')
     assert.ok(findEnvReads(health).includes('PORT'), 'the scan finds the PORT read in health.ts')
     assert.ok(readExample().has('PORT'), '.env.example lists PORT')
+  })
+
+  it('lists every environment variable the test code reads, commented in its test-only section', () => {
+    const content = readFileSync(join(REPO_ROOT, '.env.example'), 'utf8')
+    const listed = new Set([...parseEnvFile(content).keys(), ...commentedTestOnlyNames(content)])
+    const files = trackedTestFiles()
+    assert.ok(files.includes('tests/worker_pyth_slot.test.ts'), 'the scan covers tests/')
+    assert.ok(files.includes('scripts/docs-check/names.test.ts'), 'the scan covers the docs checks')
+    const missing = files.flatMap((path) =>
+      findEnvReads(readFileSync(join(REPO_ROOT, path), 'utf8'))
+        .filter((name) => !PLATFORM_VARS.has(name) && !listed.has(name))
+        .map((name) => `${name} (${path})`),
+    )
+    assert.deepEqual(missing, [])
+  })
+
+  it('lists the PYTH_SLOT_TEST_* ports and MERIDIAN_FORBIDDEN_NAMES_FILE as commented test-only entries', () => {
+    const reads = [
+      ...findEnvReads(readFileSync(join(REPO_ROOT, 'tests/worker_pyth_slot.test.ts'), 'utf8')),
+      ...findEnvReads(readFileSync(join(REPO_ROOT, 'scripts/docs-check/names.test.ts'), 'utf8')),
+    ]
+    const expected = [
+      'MERIDIAN_FORBIDDEN_NAMES_FILE',
+      'PYTH_SLOT_TEST_DYNAMIC_PORT_RANGE',
+      'PYTH_SLOT_TEST_FAUCET_PORT',
+      'PYTH_SLOT_TEST_GOSSIP_PORT',
+      'PYTH_SLOT_TEST_RPC_PORT',
+    ]
+    assert.deepEqual(
+      expected.filter((name) => !reads.includes(name)),
+      [],
+      'the scan finds each read in the test files',
+    )
+    const content = readFileSync(join(REPO_ROOT, '.env.example'), 'utf8')
+    const commented = commentedTestOnlyNames(content)
+    assert.deepEqual(
+      expected.filter((name) => !commented.has(name)),
+      [],
+      '.env.example lists each one, commented, in its test-only section',
+    )
+    const active = parseEnvFile(content)
+    assert.deepEqual(
+      expected.filter((name) => active.has(name)),
+      [],
+      'none is an active setting',
+    )
   })
 
   it('contains no secret-looking values', () => {
