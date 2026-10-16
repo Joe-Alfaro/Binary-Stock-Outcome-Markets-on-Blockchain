@@ -71,8 +71,11 @@ const GOSSIP_OFFSET = 400
 /** Agave needs room for its TPU, TVU and repair sockets. */
 const DYNAMIC_PORT_COUNT = 40
 const LEDGER_DIR = 'test-ledger/dev'
-/** The worker's health and price routes listen here; the web app's charts read them. */
-const WORKER_PORT = 8080
+/**
+ * The worker's health and price routes listen here by default; the web app's charts read them.
+ * `DEV_WORKER_PORT` or `--worker-port` moves it so a second local stack can run.
+ */
+const DEFAULT_WORKER_PORT = 8080
 /** The alpaca source's keys. They go to the worker only and are never printed. */
 const ALPACA_KEY_NAMES = ['ALPACA_API_KEY', 'ALPACA_API_SECRET'] as const
 
@@ -104,6 +107,24 @@ function validatorPorts(env: NodeJS.ProcessEnv) {
   return { ...ports, dynamicPortRange: `${dynamicPorts.low}-${dynamicPorts.high}` }
 }
 
+function parsePort(value: string): number | undefined {
+  const port = Number(value)
+  return /^\d+$/.test(value) && port >= 1 && port <= 65_535 ? port : undefined
+}
+
+/**
+ * The worker's port: `--worker-port`, then `DEV_WORKER_PORT`, then 8080. `PORT` is left alone:
+ * it is the deployed worker's setting and may sit in .env.
+ */
+function workerPort(env: NodeJS.ProcessEnv, options: DevPlanOptions): number {
+  if (options.workerPort !== undefined) return options.workerPort
+  const raw = env.DEV_WORKER_PORT?.trim()
+  if (!raw) return DEFAULT_WORKER_PORT
+  const port = parsePort(raw)
+  if (port === undefined) throw new Error(`DEV_WORKER_PORT must be a port number, got ${raw}`)
+  return port
+}
+
 /**
  * The worker's relay source: `--source`, then `RELAY_1_SOURCE`, then `mock`. Unlike the worker,
  * make dev never switches to alpaca just because its keys are set (D94).
@@ -125,6 +146,7 @@ function relaySource(env: NodeJS.ProcessEnv, options: DevPlanOptions): RelaySour
 /** The ordered steps of `make dev` on a local validator outside the default port block. */
 export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): DevPlan {
   const source = relaySource(env, options)
+  const port = workerPort(env, options)
   const { rpcPort, faucetPort, gossipPort, dynamicPortRange } = validatorPorts(env)
   const rpcUrl = `http://127.0.0.1:${rpcPort}`
   const local = { SOLANA_CLUSTER: 'localnet', SOLANA_RPC_URL: rpcUrl }
@@ -171,7 +193,7 @@ export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): D
         id: 'worker',
         command: 'npm',
         args: ['run', 'start', '-w', 'services/automation'],
-        env: { ...local, RELAY_1_SOURCE: source, DEMO_MODE: 'true', PORT: String(WORKER_PORT) },
+        env: { ...local, RELAY_1_SOURCE: source, DEMO_MODE: 'true', PORT: String(port) },
         background: true,
       },
       {
@@ -180,7 +202,7 @@ export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): D
         args: ['run', 'dev', '-w', 'app'],
         env: {
           NEXT_PUBLIC_SOLANA_RPC_URL: rpcUrl,
-          NEXT_PUBLIC_PRICE_API_URL: `http://127.0.0.1:${WORKER_PORT}`,
+          NEXT_PUBLIC_PRICE_API_URL: `http://127.0.0.1:${port}`,
         },
         background: true,
       },
@@ -188,16 +210,26 @@ export function planDev(env: NodeJS.ProcessEnv, options: DevPlanOptions = {}): D
   }
 }
 
-/** Reads `--dry-run` and `--source <name>` from the command line. */
+/** Reads `--dry-run`, `--source <name>` and `--worker-port <port>` from the command line. */
 export function parseDevArgs(argv: readonly string[]): DevArgs {
   const args: DevArgs = { dryRun: argv.includes('--dry-run') }
-  const at = argv.indexOf('--source')
-  if (at === -1) return args
-  const source = argv[at + 1]
-  if (!source || source.startsWith('--')) {
-    throw new Error(`--source needs a name: ${RELAY_SOURCE_NAMES.join(', ')}`)
+  const sourceAt = argv.indexOf('--source')
+  if (sourceAt !== -1) {
+    const source = argv[sourceAt + 1]
+    if (!source || source.startsWith('--')) {
+      throw new Error(`--source needs a name: ${RELAY_SOURCE_NAMES.join(', ')}`)
+    }
+    args.source = source
   }
-  return { ...args, source }
+  const portAt = argv.indexOf('--worker-port')
+  if (portAt !== -1) {
+    const raw = argv[portAt + 1] ?? ''
+    const port = parsePort(raw)
+    if (port === undefined)
+      throw new Error(`--worker-port needs a port number, got ${raw || 'nothing'}`)
+    args.workerPort = port
+  }
+  return args
 }
 
 function describeStep(step: DevStep) {
@@ -244,7 +276,7 @@ function workerSecrets(step: DevStep, env: NodeJS.ProcessEnv): Record<string, st
 export async function runDev(options: DevOptions): Promise<DevPlan> {
   const { env, runner, dryRun = false, waitForRpc, log = console.log, programKeyDirs } = options
   guardCluster(env)
-  const plan = planDev(env, { source: options.source })
+  const plan = planDev(env, { source: options.source, workerPort: options.workerPort })
   for (const planned of plan.steps) {
     if (dryRun) {
       log(describeStep(planned))
@@ -281,10 +313,17 @@ async function waitForValidator(rpcUrl: string, timeoutMs = 60_000) {
 
 async function main() {
   loadDotEnv()
-  const { dryRun, source } = parseDevArgs(process.argv.slice(2))
+  const { dryRun, source, workerPort } = parseDevArgs(process.argv.slice(2))
   const runner = spawnRunner()
   try {
-    await runDev({ env: process.env, runner, dryRun, source, waitForRpc: waitForValidator })
+    await runDev({
+      env: process.env,
+      runner,
+      dryRun,
+      source,
+      workerPort,
+      waitForRpc: waitForValidator,
+    })
   } catch (error) {
     runner.stopAll()
     throw error
