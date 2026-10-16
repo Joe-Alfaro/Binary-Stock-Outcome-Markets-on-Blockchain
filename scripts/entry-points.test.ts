@@ -59,6 +59,20 @@ describe('dry-run entry points (R60, R61)', () => {
     assert.match(result.stdout, /solana-test-validator/)
   })
 
+  it('make dev dry run takes the worker port from --worker-port and points the web app at it', () => {
+    const result = runScript('dev.ts', ['--dry-run', '--worker-port', '8096'], {})
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /\[worker\].*\bPORT=8096\b/)
+    assert.match(result.stdout, /\[web\].*NEXT_PUBLIC_PRICE_API_URL=http:\/\/127\.0\.0\.1:8096\b/)
+  })
+
+  it('make dev dry run takes the worker port from DEV_WORKER_PORT', () => {
+    const result = runScript('dev.ts', ['--dry-run'], { DEV_WORKER_PORT: '8095' })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /\[worker\].*\bPORT=8095\b/)
+    assert.match(result.stdout, /\[web\].*NEXT_PUBLIC_PRICE_API_URL=http:\/\/127\.0\.0\.1:8095\b/)
+  })
+
   it('make demo dry run prints the lifecycle with explorer links and exits cleanly', () => {
     const result = runScript('demo.ts', ['--dry-run'], { SOLANA_CLUSTER: 'devnet' })
     assert.equal(result.status, 0, result.stderr)

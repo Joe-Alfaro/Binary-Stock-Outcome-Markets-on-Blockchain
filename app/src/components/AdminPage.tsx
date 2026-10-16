@@ -151,7 +151,9 @@ function TickerDayCard({
   return (
     <section className="card" aria-labelledby={`${id}-title`}>
       <h3 id={`${id}-title`}>{name}</h3>
-      <p className="muted">Closed at {etTime(day.closeTs)}</p>
+      <p className="muted">
+        {now < day.closeTs ? 'Closes' : 'Closed'} at {etTime(day.closeTs)}
+      </p>
       {!open && <p>Finalized</p>}
       {open && (
         <p>

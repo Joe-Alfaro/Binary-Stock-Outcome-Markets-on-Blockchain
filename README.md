@@ -88,6 +88,8 @@ are never printed. Demo mode stays on: live prices, the charts and previous clos
 Alpaca, while each demo market settles from a replayed close (the recorded AAPL close of
 2026-10-12, and the hand-written mock fixtures for the other tickers), labelled `replayed` in the
 worker's log. The worker listens on port 8080, and the web app's charts read its price route there.
+To run a second local stack beside one that holds 8080, set `DEV_WORKER_PORT` or pass
+`make dev ARGS='--worker-port 8095'` (the flag wins); the web app's charts follow the chosen port.
 
 `make gates` runs every quality gate (formatting, lint, type checks, clippy and all test suites).
 `make test` runs only the tests. `make e2e` runs the Playwright specs locally against a private
@@ -258,9 +260,9 @@ no ticker-day is half-settled under the old slot:
 
 1. Get the provider account: a Pyth plan entitled to US equities (an access token), or Data Streams
    credentials (user ID and HMAC secret) with the US equity streams assigned.
-2. As the admin, call `update_config` with the new `oracle_slots` (there's no admin CLI yet, so use
-   the Anchor client as `tests/worker_pyth_slot.test.ts` does). For Pyth: `kind: { pyth: {} }`,
-   `feedIds` in `Config.tickers` order, `verifierProgram` = the receiver program, and
+2. As the admin, call `update_config` with the new `oracle_slots` (the Admin page doesn't cover
+   config updates, so use the Anchor client as `tests/worker_pyth_slot.test.ts` does). For Pyth:
+   `kind: { pyth: {} }`, `feedIds` in `Config.tickers` order, `verifierProgram` = the receiver program, and
    `minVerificationLevel: 0` (full Wormhole verification). For Data Streams:
    `kind: { chainlinkDataStreams: {} }`, the stream IDs as `feedIds`, and `verifierProgram` = the
    verifier program. Leave every other argument `null`.
@@ -431,7 +433,6 @@ approves each transaction in order.
 
 Not finished yet:
 
-- The admin CLI (config updates, propose and finalize admin price, pause).
 - A devnet run of `make demo`, and the first Railway deploy.
 
 ## Risks and limitations
